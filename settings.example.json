@@ -1,0 +1,45 @@
+{
+
+    forTestAll: true,
+   
+    name: 'ETH',
+    symbol: 'ETHUSDT',
+    interval: '4hr',
+
+    uTrade: 22, //考慮下單名義價值(notional)與最小下單數量(quantityLow), 設定每次下單基礎金額
+    notional: 20, //名義最小下單量(notional)為20u
+    quantityLow: 0.001,
+    digPrice: 2,
+    digSpotQuantity: 4, //現貨3位
+    digContractQuantity: 3, //合約3位
+
+    binance: {
+
+        forTest: true, //true=用apiContractTest金鑰(測試帳號); false=用apiContract(正式帳號); 未設或非布林預設true(安全鎖測試)
+
+        basePath: 'https://fapi.binance.com', //正式合約或帶單合約網址(forTest=false)
+        basePathTest: 'https://demo-fapi.binance.com', //測試合約網址(forTest=true, 含test顯式覆寫)
+        
+        apiSpot: {
+            'name': 'qtdSpot',
+            'key': '',
+            'secret': '',
+        },
+
+        //合約api: https://www.binance.com/en/my/settings/api-management
+        apiContract: {
+            'name': '{name}',
+            'key': '{key}',
+            'secret': '{secret}',
+        },
+
+        //測試合約api: https://demo.binance.com/en/my/settings/api-management
+        apiContractTest: {
+            'name': '{name}',
+            'key': '{key}',
+            'secret': '{secret}',
+        },
+
+    },
+
+}

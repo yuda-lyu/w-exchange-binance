@@ -1,0 +1,32 @@
+{
+  "name": "w-exchange-binance",
+  "version": "1.0.0",
+  "main": "dist/w-exchange-binance.umd.js",
+  "dependencies": {
+    "@binance/derivatives-trading-usds-futures": "^30.0.0",
+    "@binance/spot": "^31.0.2",
+    "json5": "^2.2.3",
+    "lodash-es": "^4.18.1",
+    "wsemi": "^1.8.55"
+  },
+  "devDependencies": {
+    "w-package-tools": "^1.1.7"
+  },
+  "scripts": {
+    "test": "mocha --timeout 60000",
+    "deploy": "gh-pages -d docs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yuda-lyu/w-exchange-binance.git"
+  },
+  "keywords": [
+    "package",
+    "tool",
+    "wrapper",
+    "binance",
+    "node"
+  ],
+  "author": "yuda-lyu(semisphere)",
+  "license": "MIT"
+}
