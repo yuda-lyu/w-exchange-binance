@@ -7,17 +7,25 @@ let fdTar = './dist'
 
 
 rollupFiles({
-    fns: getFiles(fdSrc),
+    fns: 'WExchangeBinance.mjs',
     fdSrc,
     fdTar,
     nameDistType: 'kebabCase',
     globals: {
         'path': 'path',
         'fs': 'fs',
+        'crypto': 'crypto',
+        'https': 'https',
+        'os': 'os',
+        'events': 'events',
     },
     external: [
         'path',
         'fs',
+        'crypto',
+        'https',
+        'os',
+        'events',
     ],
 })
 
