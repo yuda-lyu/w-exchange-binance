@@ -12,42 +12,51 @@ let main = async() => {
     console.log('res', res)
     // res [
     //   {
-    //     orderId: 7605276920,
+    //     //algo 原生欄位
+    //     algoId: 1000000097809196,
+    //     clientAlgoId: 'tdid-20251206194325-Zqaa49_SL',
+    //     algoType: 'CONDITIONAL',
+    //     orderType: 'STOP_MARKET',
     //     symbol: 'ETHUSDT',
-    //     status: 'NEW',
-    //     clientOrderId: 'tdid-20251206194325-Zqaa49_SL',
-    //     price: '0',
-    //     avgPrice: '0',
-    //     origQty: '0.007',
-    //     executedQty: '0',
-    //     cumQuote: '0.00000',
-    //     timeInForce: 'GTC',
-    //     type: 'STOP_MARKET',
-    //     reduceOnly: true,
-    //     closePosition: false,
     //     side: 'SELL',
-    //     positionSide: 'BOTH',
-    //     stopPrice: '3030.65',
-    //     workingType: 'MARK_PRICE',
-    //     priceProtect: false,
-    //     origType: 'STOP_MARKET',
-    //     priceMatch: 'NONE',
+    //     positionSide: 'LONG',
+    //     timeInForce: 'GTC',
+    //     quantity: '0.014',
+    //     algoStatus: 'NEW',
+    //     actualOrderId: '',
+    //     actualPrice: '0.00000',
+    //     triggerPrice: '1469.50',
+    //     price: '0.00',
+    //     icebergQuantity: null,
+    //     tpOrderType: '',
     //     selfTradePreventionMode: 'EXPIRE_MAKER',
+    //     workingType: 'MARK_PRICE',
+    //     priceMatch: 'NONE',
+    //     closePosition: false,
+    //     priceProtect: false,
+    //     reduceOnly: true,
+    //     createTime: 1765021407346,
+    //     updateTime: 1765021407346,
+    //     triggerTime: 0,
     //     goodTillDate: 0,
-    //     time: 1765021407346,
-    //     updateTime: 1765021407346
+    //     //mirror 對齊普通單欄位 + isAlgo 旗標 (見 opBinaContractListOrders)
+    //     orderId: '1000000097809196', //= cstr(algoId)
+    //     clientOrderId: 'tdid-20251206194325-Zqaa49_SL',
+    //     status: 'NEW', //= algoStatus
+    //     type: 'STOP_MARKET', //= orderType
+    //     stopPrice: '1469.50', //= triggerPrice
+    //     isAlgo: true
     //   },
     //   {
-    //     orderId: 7605276918,
-    //     symbol: 'ETHUSDT',
-    //     status: 'NEW',
-    //     clientOrderId: 'tdid-20251206194325-Zqaa49_TP',
-    //     price: '0',
-    //     avgPrice: '0',
-    //     origQty: '0.007',
-    //     goodTillDate: 0,
-    //     time: 1765021407201,
-    //     updateTime: 1765021407201
+    //     //第二筆為 TP, 結構同上, 差異欄位:
+    //     algoId: 1000000097809210,
+    //     clientAlgoId: 'tdid-20251206194325-Zqaa49_TP',
+    //     orderType: 'TAKE_PROFIT_MARKET',
+    //     triggerPrice: '1670.59',
+    //     type: 'TAKE_PROFIT_MARKET', //= orderType
+    //     stopPrice: '1670.59', //= triggerPrice
+    //     isAlgo: true
+    //     //...其餘欄位同上
     //   }
     // ]
 

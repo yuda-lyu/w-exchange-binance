@@ -13,31 +13,14 @@ let main = async() => {
         console.log('ress', ress)
         // ress [
         //   {
-        //     orderId: 7605276918,
-        //     symbol: 'ETHUSDT',
-        //     status: 'CANCELED',
-        //     clientOrderId: 'tdid-20251206194325-Zqaa49_TP',
-        //     price: '0.00',
-        //     avgPrice: '0.00',
-        //     origQty: '0.007',
-        //     executedQty: '0.000',
-        //     cumQty: '0.000',
-        //     cumQuote: '0.00000',
-        //     timeInForce: 'GTC',
-        //     type: 'TAKE_PROFIT_MARKET',
-        //     reduceOnly: true,
-        //     closePosition: false,
-        //     side: 'SELL',
-        //     positionSide: 'BOTH',
-        //     stopPrice: '3048.87',
-        //     workingType: 'MARK_PRICE',
-        //     priceProtect: false,
-        //     origType: 'TAKE_PROFIT_MARKET',
-        //     priceMatch: 'NONE',
-        //     selfTradePreventionMode: 'EXPIRE_MAKER',
-        //     goodTillDate: 0,
-        //     updateTime: 1765024172313
+        //     //algo 孤兒單(TP/SL)由 cancelAlgoOrder 撤, 回精簡回應:
+        //     algoId: 1000000097812785,
+        //     clientAlgoId: 'tdid-20251206194325-Zqaa49_TP',
+        //     code: '200',
+        //     msg: 'success'
         //   }
+        //   //註: 若孤兒為普通單(由 cancelOrder 撤), 該元素為完整訂單物件
+        //   //    (status:'CANCELED', 結構同 g_contract_cancelOrder.mjs 的 res)
         // ]
     }
 

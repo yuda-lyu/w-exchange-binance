@@ -13,30 +13,28 @@ let main = async() => {
     let res = await webina.opBinaContractCancelOrder(st, orderId)
     console.log('res', res)
     // res {
-    //   orderId: 7605276918,
+    //   orderId: 9253619056,
     //   symbol: 'ETHUSDT',
     //   status: 'CANCELED',
-    //   clientOrderId: 'tdid-20251206194325-Zqaa49_TP',
-    //   price: '0.00',
-    //   avgPrice: '0.00',
-    //   origQty: '0.007',
+    //   clientOrderId: 'KgUGGEwT2WVt5appBQu7qj',
+    //   price: '1396.95',
+    //   origQty: '0.020',
     //   executedQty: '0.000',
     //   cumQty: '0.000',
-    //   cumQuote: '0.00000',
     //   timeInForce: 'GTC',
-    //   type: 'TAKE_PROFIT_MARKET',
-    //   reduceOnly: true,
+    //   type: 'LIMIT',
+    //   reduceOnly: false,
     //   closePosition: false,
-    //   side: 'SELL',
-    //   positionSide: 'BOTH',
-    //   stopPrice: '3048.87',
-    //   workingType: 'MARK_PRICE',
+    //   side: 'BUY',
+    //   positionSide: 'LONG',
+    //   stopPrice: '0.00',
+    //   workingType: 'CONTRACT_PRICE',
     //   priceProtect: false,
-    //   origType: 'TAKE_PROFIT_MARKET',
+    //   origType: 'LIMIT',
     //   priceMatch: 'NONE',
     //   selfTradePreventionMode: 'EXPIRE_MAKER',
     //   goodTillDate: 0,
-    //   updateTime: 1765024172313
+    //   updateTime: 1780759499844
     // }
 
 }
