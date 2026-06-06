@@ -46,7 +46,7 @@ let opBinaContractCancelAlgoOrder = async(st, algoId, opt = {}) => {
     //clod
     //v22起欄位名為algoId(camelCase, 之前v19~v21是algoid全小寫)
     let clodr = await client.restAPI.cancelAlgoOrder({
-        algoId: typeof algoId === 'string' ? algoId : Number(algoId),
+        algoId: isestr(algoId) ? algoId : Number(algoId),
     })
     let clod = await clodr.data()
 

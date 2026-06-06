@@ -1,5 +1,5 @@
 ﻿import getSettings from './src/getSettings.mjs'
-import opBinaContractCancelOrder from './src/opBinaContractCancelOrder.mjs'
+import webina from './src/WExchangeBinance.mjs'
 
 
 //幣安合約單偵測成對交易單取消
@@ -10,7 +10,7 @@ let main = async() => {
 
     let orderId = '10630546603'
 
-    let res = await opBinaContractCancelOrder(st, orderId)
+    let res = await webina.opBinaContractCancelOrder(st, orderId)
     console.log('res', res)
     // res {
     //   orderId: 7605276918,

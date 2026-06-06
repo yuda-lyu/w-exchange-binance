@@ -1,5 +1,5 @@
 ﻿import getSettings from './src/getSettings.mjs'
-import opBinaContractCancelResidualOrders from './src/opBinaContractCancelResidualOrders.mjs'
+import webina from './src/WExchangeBinance.mjs'
 
 
 //幣安成對合約單之取消遺留單向單
@@ -9,7 +9,7 @@ let st = getSettings()
 let main = async() => {
 
     let call = async() => {
-        let ress = await opBinaContractCancelResidualOrders(st)
+        let ress = await webina.opBinaContractCancelResidualOrders(st)
         console.log('ress', ress)
         // ress [
         //   {

@@ -1,8 +1,7 @@
 ﻿import _ from 'lodash-es'
 import w from 'wsemi'
 import getSettings from './src/getSettings.mjs'
-import opBinaContractListOrdersHistory from './src/opBinaContractListOrdersHistory.mjs'
-import opBinaContractListTradesFilled from './src/opBinaContractListTradesFilled.mjs'
+import webina from './src/WExchangeBinance.mjs'
 
 
 //幣安合約已成交訂單查詢 (依起訖時間)
@@ -22,8 +21,8 @@ let main = async() => {
     console.log('')
 
     //兩源並查
-    let orders = await opBinaContractListOrdersHistory(st, timeStart, timeEnd)
-    let trades = await opBinaContractListTradesFilled(st, timeStart, timeEnd)
+    let orders = await webina.opBinaContractListOrdersHistory(st, timeStart, timeEnd)
+    let trades = await webina.opBinaContractListTradesFilled(st, timeStart, timeEnd)
 
     //── 區段A: 訂單層級歷史 (依tdid分組, 看entry/TP/SL狀態) ──
     console.log('─'.repeat(70))

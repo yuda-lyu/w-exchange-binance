@@ -1,5 +1,5 @@
 ﻿import getSettings from './src/getSettings.mjs'
-import opBinaContractQuerySymbolInfor from './src/opBinaContractQuerySymbolInfor.mjs'
+import webina from './src/WExchangeBinance.mjs'
 
 
 //幣安查詢幣種資訊
@@ -8,7 +8,7 @@ let st = getSettings()
 
 let main = async() => {
 
-    let res = await opBinaContractQuerySymbolInfor(st, 'ETHUSDT')
+    let res = await webina.opBinaContractQuerySymbolInfor(st, 'ETHUSDT')
     console.log('res', res)
     // res {
     //   symbol: 'ETHUSDT',

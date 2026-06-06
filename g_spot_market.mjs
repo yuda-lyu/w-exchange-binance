@@ -1,5 +1,5 @@
 ﻿import getSettings from './src/getSettings.mjs'
-import opBinaSpotMarket from './src/opBinaSpotMarket.mjs'
+import webina from './src/WExchangeBinance.mjs'
 
 
 //幣安現貨市價購買
@@ -17,7 +17,7 @@ let main = async() => {
     let rStopLoss = 0.01
     console.log('rStopLoss', rStopLoss)
 
-    let res = await opBinaSpotMarket(st, uTrade, rTakeProfit, rStopLoss)
+    let res = await webina.opBinaSpotMarket(st, uTrade, rTakeProfit, rStopLoss)
     console.log('res', res)
     // res {
     //   id: 17235633322,

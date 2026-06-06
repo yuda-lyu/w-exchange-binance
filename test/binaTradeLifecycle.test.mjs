@@ -3,8 +3,7 @@ import _ from 'lodash-es'
 import w from 'wsemi'
 import getSettings from '../src/getSettings.mjs'
 import { nowTpeStrp } from '../src/ott.mjs'
-import opBinaContractMarket from '../src/opBinaContractMarket.mjs'
-import opBinaContractQueryOrderInfo from '../src/opBinaContractQueryOrderInfo.mjs'
+import webina from '../src/WExchangeBinance.mjs'
 import { cleanupByResult } from './binaSetup.mjs'
 
 
@@ -26,7 +25,7 @@ describe('幣安合約-下單生命週期 (apiContractTest, 自動清理)', func
 
     it('market進場+TP+SL(long): 回傳含entry/TP/SL必要欄位且方向合理', async () => {
         let tdid = `tdid-${nowTpeStrp()}-${w.genID(6)}`
-        let r = await opBinaContractMarket(st, 'long', tdid, uTrade, 0.08, 0.05, { forceTest: true })
+        let r = await webina.opBinaContractMarket(st, 'long', tdid, uTrade, 0.08, 0.05, { forceTest: true })
         placed = r
 
         //tdid對應
@@ -62,7 +61,7 @@ describe('幣安合約-下單生命週期 (apiContractTest, 自動清理)', func
             idTp: placed.idTp,
             idSl: placed.idSl,
         }
-        let q = await opBinaContractQueryOrderInfo(st, oQuery, { forceTest: true })
+        let q = await webina.opBinaContractQueryOrderInfo(st, oQuery, { forceTest: true })
         assert.strictEqual(q.tdid, placed.idTrade, 'tdid一致')
         assert.ok(_.isObject(q.resEntry) && !q.resEntry.error, 'entry查得到(無error)')
         assert.ok(w.isestr(_.get(q, 'resEntry.status', '')), 'entry有status')

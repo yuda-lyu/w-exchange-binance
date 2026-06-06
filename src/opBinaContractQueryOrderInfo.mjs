@@ -1,5 +1,8 @@
+import find from 'lodash-es/find.js'
 import get from 'lodash-es/get.js'
+import cstr from 'wsemi/src/cstr.mjs'
 import isbol from 'wsemi/src/isbol.mjs'
+import isestr from 'wsemi/src/isestr.mjs'
 import { DerivativesTradingUsdsFutures } from '@binance/derivatives-trading-usds-futures'
 
 
@@ -49,7 +52,7 @@ let opBinaContractQueryOrderInfo = async(st, o, opt = {}) => {
         try {
             let r = await client.restAPI.queryOrder({
                 symbol: SYMBOL,
-                orderId: typeof orderId === 'string' ? orderId : Number(orderId),
+                orderId: isestr(orderId) ? orderId : Number(orderId),
             })
             return await r.data()
         }
@@ -59,15 +62,35 @@ let opBinaContractQueryOrderInfo = async(st, o, opt = {}) => {
     }
 
     //queryAlgo: 查algo單(TP/SL使用)
+    //CONDITIONAL TP/SL 無可用單筆查詢端點(queryAlgoOrder 一律回 'Order does not exist');
+    //且 queryAllAlgoOrders(歷史端點)對「剛下、仍開啟」的單有最終一致性延遲(實測下單後數百ms即查不到),
+    //故先查 currentAllAlgoOpenOrders(對開啟中的單即時可靠), 再以 queryAllAlgoOrders 補已觸發/已撤/已成交的歷史單.
     let queryAlgo = async(algoId) => {
         if (!algoId) {
             return null
         }
         try {
-            let r = await client.restAPI.queryAlgoOrder({
-                algoId: typeof algoId === 'string' ? algoId : Number(algoId),
+
+            //1) 開啟中(對剛下的單即時可靠)
+            let ro = await client.restAPI.currentAllAlgoOpenOrders({ symbol: SYMBOL })
+            let open = await ro.data()
+            let hitOpen = find(open, (o) => cstr(o.algoId) === cstr(algoId))
+            if (hitOpen) {
+                return hitOpen
+            }
+
+            //2) 已觸發/已撤/已成交 → 查歷史(供結算判斷成交)
+            let rh = await client.restAPI.queryAllAlgoOrders({
+                symbol: SYMBOL,
+                algoId: isestr(algoId) ? Number(algoId) : algoId,
             })
-            return await r.data()
+            let hist = await rh.data()
+            let hitHist = find(hist, (o) => cstr(o.algoId) === cstr(algoId))
+            if (hitHist) {
+                return hitHist
+            }
+
+            return { error: 'Order does not exist.' }
         }
         catch (err) {
             return { error: String(err) }

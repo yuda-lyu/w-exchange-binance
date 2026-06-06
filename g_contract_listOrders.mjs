@@ -1,5 +1,5 @@
 ﻿import getSettings from './src/getSettings.mjs'
-import opBinaContractListOrders from './src/opBinaContractListOrders.mjs'
+import webina from './src/WExchangeBinance.mjs'
 
 
 //幣安列舉未成交合約單
@@ -8,7 +8,7 @@ let st = getSettings()
 
 let main = async() => {
 
-    let res = await opBinaContractListOrders(st)
+    let res = await webina.opBinaContractListOrders(st)
     console.log('res', res)
     // res [
     //   {

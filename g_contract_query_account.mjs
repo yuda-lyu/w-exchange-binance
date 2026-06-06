@@ -1,5 +1,5 @@
 ﻿import getSettings from './src/getSettings.mjs'
-import opBinaContractQueryAccountInfor from './src/opBinaContractQueryAccountInfor.mjs'
+import webina from './src/WExchangeBinance.mjs'
 
 
 //幣安查詢帳號資訊
@@ -8,7 +8,7 @@ let st = getSettings()
 
 let main = async() => {
 
-    let res = await opBinaContractQueryAccountInfor(st)
+    let res = await webina.opBinaContractQueryAccountInfor(st)
     console.log('res', res)
     // res {
     //   totalInitialMargin: '0.00000000',

@@ -1,5 +1,5 @@
 ﻿import getSettings from './src/getSettings.mjs'
-import opBinaSpotLimit from './src/opBinaSpotLimit.mjs'
+import webina from './src/WExchangeBinance.mjs'
 
 
 //幣安現貨限價購買
@@ -20,7 +20,7 @@ let main = async() => {
     let rStopLoss = 0.01
     console.log('rStopLoss', rStopLoss)
 
-    let res = await opBinaSpotLimit(st, price, uTrade, rTakeProfit, rStopLoss)
+    let res = await webina.opBinaSpotLimit(st, price, uTrade, rTakeProfit, rStopLoss)
     console.log('res', res)
     // res {
     //   id: 17236102110,
