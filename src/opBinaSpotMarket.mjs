@@ -4,10 +4,12 @@ import dig from 'wsemi/src/dig.mjs'
 import haskey from 'wsemi/src/haskey.mjs'
 import isnum from 'wsemi/src/isnum.mjs'
 import { Spot } from '@binance/spot'
-import ott from './ott.mjs'
 
 
-let opBinaSpotMarket = async(st, uTrade, rTakeProfit, rStopLoss, opt = {}) => {
+let opBinaSpotMarket = async(st, ott, uTrade, rTakeProfit, rStopLoss, opt = {}) => {
+
+    // //forceTest
+    // let forceTest = get(opt, 'forceTest', null)
 
     //params
     let API_KEY = get(st, 'binance.apiSpot.key', '')

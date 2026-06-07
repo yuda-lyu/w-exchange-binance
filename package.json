@@ -1,6 +1,6 @@
 {
   "name": "w-exchange-binance",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "main": "dist/w-exchange-binance.umd.js",
   "dependencies": {
     "@binance/derivatives-trading-usds-futures": "^30.0.0",

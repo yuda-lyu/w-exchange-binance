@@ -1,6 +1,6 @@
 ﻿import w from 'wsemi'
-import { nowTpeStrp } from './src/ott.mjs'
 import getSettings from './src/getSettings.mjs'
+import ott, { nowTpeStrp } from './src/ott.mjs'
 import webina from './src/WExchangeBinance.mjs'
 
 
@@ -21,7 +21,7 @@ let main = async() => {
     let rStopLoss = 0.002
     console.log('rStopLoss', rStopLoss)
 
-    let res = await webina.opBinaContractMarket(st, 'long', tdid, uTrade, rTakeProfit, rStopLoss)
+    let res = await webina.opBinaContractMarket(st, ott, 'long', tdid, uTrade, rTakeProfit, rStopLoss)
     console.log('res', res)
     // res {
     //   mode: 'long',

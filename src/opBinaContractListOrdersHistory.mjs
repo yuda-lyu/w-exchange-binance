@@ -7,7 +7,6 @@ import cstr from 'wsemi/src/cstr.mjs'
 import isbol from 'wsemi/src/isbol.mjs'
 import sep from 'wsemi/src/sep.mjs'
 import { DerivativesTradingUsdsFutures } from '@binance/derivatives-trading-usds-futures'
-import ott from './ott.mjs'
 
 
 //查詢指定起訖時間內的訂單層級歷史(allOrders普通單 + queryAllAlgoOrders algo單)
@@ -18,10 +17,12 @@ import ott from './ott.mjs'
 //     avgPrice, executedQty, origQty, time, timeStr, updateTime }]
 //  普通單(entry)的clientOrderId為 tdid-XXX_ENTRY; algo單(TP/SL)的clientAlgoId為 tdid-XXX_TP / _SL
 //  與accountTradeList以orderId對應(普通單orderId / algo單algoId)
-let opBinaContractListOrdersHistory = async(st, timeStart, timeEnd, opt = {}) => {
+let opBinaContractListOrdersHistory = async(st, ott, timeStart, timeEnd, opt = {}) => {
+
+    //forceTest
+    let forceTest = get(opt, 'forceTest', null)
 
     //params
-    let forceTest = get(opt, 'forceTest', null)
     let forTestAll = get(st, 'forTestAll', null)
     let forTest = get(st, 'binance.forTest', null)
     if (isbol(forceTest)) {

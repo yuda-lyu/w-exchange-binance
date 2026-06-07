@@ -2,7 +2,7 @@ import assert from 'assert'
 import _ from 'lodash-es'
 import w from 'wsemi'
 import getSettings from '../src/getSettings.mjs'
-import { nowTpeStrp } from '../src/ott.mjs'
+import ott, { nowTpeStrp } from '../src/ott.mjs'
 import webina from '../src/WExchangeBinance.mjs'
 import { cleanupByResult } from './binaSetup.mjs'
 
@@ -25,7 +25,7 @@ describe('幣安合約-下單生命週期 (apiContractTest, 自動清理)', func
 
     it('market進場+TP+SL(long): 回傳含entry/TP/SL必要欄位且方向合理', async () => {
         let tdid = `tdid-${nowTpeStrp()}-${w.genID(6)}`
-        let r = await webina.opBinaContractMarket(st, 'long', tdid, uTrade, 0.08, 0.05, { forceTest: true })
+        let r = await webina.opBinaContractMarket(st, ott, 'long', tdid, uTrade, 0.08, 0.05, { forceTest: true })
         placed = r
 
         //tdid對應

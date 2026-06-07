@@ -8,13 +8,14 @@ import isestr from 'wsemi/src/isestr.mjs'
 import isnum from 'wsemi/src/isnum.mjs'
 import { DerivativesTradingUsdsFutures } from '@binance/derivatives-trading-usds-futures'
 import { BadRequestError } from '@binance/common'
-import ott from './ott.mjs'
 
 
-let opBinaContractMarket = async(st, mode, tdid, uTrade, rTakeProfit, rStopLoss, opt = {}) => {
+let opBinaContractMarket = async(st, ott, mode, tdid, uTrade, rTakeProfit, rStopLoss, opt = {}) => {
+
+    //forceTest
+    let forceTest = get(opt, 'forceTest', null)
 
     //params
-    let forceTest = get(opt, 'forceTest', null)
     let forTestAll = get(st, 'forTestAll', null)
     let forTest = get(st, 'binance.forTest', null)
     if (isbol(forceTest)) {

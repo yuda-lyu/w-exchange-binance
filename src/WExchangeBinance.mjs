@@ -14,8 +14,6 @@ import opBinaContractCancelAlgoOrder from './opBinaContractCancelAlgoOrder.mjs'
 import opBinaContractCancelAllOrder from './opBinaContractCancelAllOrder.mjs'
 import opBinaContractCancelAllAlgoOrder from './opBinaContractCancelAllAlgoOrder.mjs'
 import opBinaContractCancelResidualOrders from './opBinaContractCancelResidualOrders.mjs'
-import getSettings from './getSettings.mjs'
-import ott, { nowTpeStr, nowTpeStrp } from './ott.mjs'
 
 
 let WExchangeBinance = {
@@ -45,12 +43,6 @@ let WExchangeBinance = {
     opBinaContractCancelAllOrder,
     opBinaContractCancelAllAlgoOrder,
     opBinaContractCancelResidualOrders,
-
-    //工具
-    getSettings,
-    ott,
-    nowTpeStr,
-    nowTpeStrp,
 
 }
 

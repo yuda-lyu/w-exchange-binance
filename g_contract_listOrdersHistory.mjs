@@ -1,6 +1,7 @@
 ﻿import _ from 'lodash-es'
 import w from 'wsemi'
 import getSettings from './src/getSettings.mjs'
+import ott from './src/ott.mjs'
 import webina from './src/WExchangeBinance.mjs'
 
 
@@ -21,8 +22,8 @@ let main = async() => {
     console.log('')
 
     //兩源並查
-    let orders = await webina.opBinaContractListOrdersHistory(st, timeStart, timeEnd)
-    let trades = await webina.opBinaContractListTradesFilled(st, timeStart, timeEnd)
+    let orders = await webina.opBinaContractListOrdersHistory(st, ott, timeStart, timeEnd)
+    let trades = await webina.opBinaContractListTradesFilled(st, ott, timeStart, timeEnd)
 
     //── 區段A: 訂單層級歷史 (依tdid分組, 看entry/TP/SL狀態) ──
     console.log('─'.repeat(70))

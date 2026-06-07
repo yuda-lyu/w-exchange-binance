@@ -46,7 +46,7 @@ describe('幣安合約-讀取型查詢 (apiContractTest)', function() {
     it('listOrdersHistory: 區間查詢回傳訂單歷史(含tdid/kind/status, 正規化結構)', async () => {
         let tEnd = ott().format('YYYY-MM-DDTHH:mm:ss')
         let tStart = ott().subtract(3, 'day').format('YYYY-MM-DDTHH:mm:ss')
-        let r = await webina.opBinaContractListOrdersHistory(st, tStart, tEnd, { forceTest: true })
+        let r = await webina.opBinaContractListOrdersHistory(st, ott, tStart, tEnd, { forceTest: true })
         assert.ok(_.isArray(r), '應為陣列')
         for (let o of r) {
             assert.ok(w.isestr(w.cstr(o.orderId)), 'orderId可字串化')
@@ -60,7 +60,7 @@ describe('幣安合約-讀取型查詢 (apiContractTest)', function() {
     it('listTradesFilled: 區間查詢回傳成交明細(含手續費/realizedPnl)', async () => {
         let tEnd = ott().format('YYYY-MM-DDTHH:mm:ss')
         let tStart = ott().subtract(3, 'day').format('YYYY-MM-DDTHH:mm:ss')
-        let r = await webina.opBinaContractListTradesFilled(st, tStart, tEnd, { forceTest: true })
+        let r = await webina.opBinaContractListTradesFilled(st, ott, tStart, tEnd, { forceTest: true })
         assert.ok(_.isArray(r), '應為陣列')
         for (let t of r) {
             assert.ok(w.isestr(t.id), 'trade id為字串')

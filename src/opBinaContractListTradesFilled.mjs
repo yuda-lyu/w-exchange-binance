@@ -7,7 +7,6 @@ import cstr from 'wsemi/src/cstr.mjs'
 import isbol from 'wsemi/src/isbol.mjs'
 import isestr from 'wsemi/src/isestr.mjs'
 import { DerivativesTradingUsdsFutures } from '@binance/derivatives-trading-usds-futures'
-import ott from './ott.mjs'
 
 
 //查詢指定起訖時間內的實際成交明細(accountTradeList)
@@ -17,10 +16,12 @@ import ott from './ott.mjs'
 //  [{ id, orderId, time, timeStr, side, positionSide, price, qty, quoteQty,
 //     commission, commissionAsset, realizedPnl, maker, buyer }]
 //注意: accountTradeList「不含」clientOrderId, 要對回tdid須以orderId join opBinaContractListOrdersHistory
-let opBinaContractListTradesFilled = async(st, timeStart, timeEnd, opt = {}) => {
+let opBinaContractListTradesFilled = async(st, ott, timeStart, timeEnd, opt = {}) => {
+
+    //forceTest
+    let forceTest = get(opt, 'forceTest', null)
 
     //params
-    let forceTest = get(opt, 'forceTest', null)
     let forTestAll = get(st, 'forTestAll', null)
     let forTest = get(st, 'binance.forTest', null)
     if (isbol(forceTest)) {

@@ -1,4 +1,5 @@
 ﻿import getSettings from './src/getSettings.mjs'
+import ott from './src/ott.mjs'
 import webina from './src/WExchangeBinance.mjs'
 
 
@@ -17,7 +18,7 @@ let main = async() => {
     let rStopLoss = 0.01
     console.log('rStopLoss', rStopLoss)
 
-    let res = await webina.opBinaSpotMarket(st, uTrade, rTakeProfit, rStopLoss)
+    let res = await webina.opBinaSpotMarket(st, ott, uTrade, rTakeProfit, rStopLoss)
     console.log('res', res)
     // res {
     //   id: 17235633322,
