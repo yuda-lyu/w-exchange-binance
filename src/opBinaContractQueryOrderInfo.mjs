@@ -114,28 +114,28 @@ let opBinaContractQueryOrderInfo = async(st, o, opt = {}) => {
     }
     // console.log('r', r)
     // r {
-    //   tdid: 'tdid-20251207205039-YbL7MN',
-    //   idEntry: '7605753097',
-    //   idTp: '7605753100',
-    //   idSl: '7605753102',
+    //   tdid: 'tdid-20260729213334-cB7pjm',
+    //   idEntry: '14925106909',
+    //   idTp: '1000000149617643',
+    //   idSl: '1000000149617632',
     //   resEntry: {
-    //     orderId: 7605753097,
+    //     orderId: 14925106909,
     //     symbol: 'ETHUSDT',
     //     status: 'FILLED',          //'NEW' / 'FILLED' / 'CANCELED' / 'EXPIRED' ...
-    //     clientOrderId: 'tdid-20251207205039-YbL7MN_ENTRY',
-    //     avgPrice: '3047.32',       //實際成交均價
-    //     executedQty: '0.007',      //實際成交數量
-    //     cumQuote: '21.331',        //名義成交金額(USDT)
+    //     clientOrderId: 'tdid-20260729213334-cB7pjm_ENTRY',
+    //     avgPrice: '1908.17000',    //實際成交均價
+    //     executedQty: '0.011',      //實際成交數量
+    //     cumQuote: '20.98987',      //名義成交金額(USDT)
     //     ...
     //   },
     //   resTp: {
-    //     algoId: 7605753100,
+    //     algoId: 1000000149617643,
     //     symbol: 'ETHUSDT',
-    //     status: 'NEW',             //'NEW' / 'FILLED' / 'CANCELED' / 'TRIGGERED' / 'EXPIRED'
-    //     clientAlgoId: 'tdid-20251207205039-YbL7MN_TP',
-    //     stopPrice: '3059.51',
-    //     avgPrice: '0',             //觸發後才有值
-    //     executedQty: '0',
+    //     algoStatus: 'NEW',         //'NEW' / 'FILLED' / 'CANCELED' / 'TRIGGERED' / 'EXPIRED'
+    //     clientAlgoId: 'tdid-20260729213334-cB7pjm_TP',
+    //     triggerPrice: '2060.54',
+    //     actualQty: '0.0',          //觸發後才有值
+    //     actualOrderId: '',         //觸發後產生的普通單orderId(未觸發為空)
     //     ...
     //   },
     //   resSl: { ... 同上結構 }

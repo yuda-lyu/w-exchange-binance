@@ -269,16 +269,14 @@ let opBinaContractMarket = async(st, ott, mode, tdid, uTrade, rTakeProfit, rStop
         resEntry = await rfEntry.data()
         // console.log('resEntry', resEntry)
         // resEntry {
-        //   orderId: 7605753097,
+        //   orderId: 14925106909,
         //   symbol: 'ETHUSDT',
         //   status: 'NEW',
-        //   clientOrderId: 'tdid-20251207205039-YbL7MN_ENTRY',
+        //   clientOrderId: 'tdid-20260729213334-cB7pjm_ENTRY',
         //   price: '0.00',
-        //   avgPrice: '0.00',
-        //   origQty: '0.007',
+        //   origQty: '0.011',
         //   executedQty: '0.000',
         //   cumQty: '0.000',
-        //   cumQuote: '0.00000',
         //   timeInForce: 'GTC',
         //   type: 'MARKET',
         //   reduceOnly: false,
@@ -292,7 +290,7 @@ let opBinaContractMarket = async(st, ott, mode, tdid, uTrade, rTakeProfit, rStop
         //   priceMatch: 'NONE',
         //   selfTradePreventionMode: 'EXPIRE_MAKER',
         //   goodTillDate: 0,
-        //   updateTime: 1765111842005
+        //   updateTime: 1785332015881
         // }
 
         //幣安帶單有下單速率限制20筆/10s, 每單至少500ms
@@ -320,30 +318,29 @@ let opBinaContractMarket = async(st, ott, mode, tdid, uTrade, rTakeProfit, rStop
         resSl = await rfSl.data()
         // console.log('resSl', resSl)
         // resSl {
-        //   orderId: 7605753102,
+        //   algoId: 1000000149617632,
+        //   clientAlgoId: 'tdid-20260729213334-cB7pjm_SL',
+        //   algoType: 'CONDITIONAL',
+        //   orderType: 'STOP_MARKET',
         //   symbol: 'ETHUSDT',
-        //   status: 'NEW',
-        //   clientOrderId: 'tdid-20251207205039-YbL7MN_SL',
-        //   price: '0.00',
-        //   avgPrice: '0.00',
-        //   origQty: '0.007',
-        //   executedQty: '0.000',
-        //   cumQty: '0.000',
-        //   cumQuote: '0.00000',
-        //   timeInForce: 'GTC',
-        //   type: 'STOP_MARKET',
-        //   reduceOnly: true,
-        //   closePosition: false,
         //   side: 'SELL',
         //   positionSide: 'LONG',
-        //   stopPrice: '3041.23',
-        //   workingType: 'MARK_PRICE',
-        //   priceProtect: false,
-        //   origType: 'STOP_MARKET',
-        //   priceMatch: 'NONE',
+        //   timeInForce: 'GTC',
+        //   quantity: '0.011',
+        //   algoStatus: 'NEW',
+        //   triggerPrice: '1812.52',
+        //   price: '0.00',
+        //   icebergQuantity: null,
         //   selfTradePreventionMode: 'EXPIRE_MAKER',
-        //   goodTillDate: 0,
-        //   updateTime: 1765111842723
+        //   workingType: 'MARK_PRICE',
+        //   priceMatch: 'NONE',
+        //   closePosition: false,
+        //   priceProtect: false,
+        //   reduceOnly: true,
+        //   createTime: 1785332016734,
+        //   updateTime: 1785332016734,
+        //   triggerTime: 0,
+        //   goodTillDate: 0
         // }
 
         //幣安帶單有下單速率限制20筆/10s, 每單至少500ms
@@ -371,30 +368,29 @@ let opBinaContractMarket = async(st, ott, mode, tdid, uTrade, rTakeProfit, rStop
         resTp = await rfTp.data()
         // console.log('resTp', resTp)
         // resTp {
-        //   orderId: 7605753100,
+        //   algoId: 1000000149617643,
+        //   clientAlgoId: 'tdid-20260729213334-cB7pjm_TP',
+        //   algoType: 'CONDITIONAL',
+        //   orderType: 'TAKE_PROFIT_MARKET',
         //   symbol: 'ETHUSDT',
-        //   status: 'NEW',
-        //   clientOrderId: 'tdid-20251207205039-YbL7MN_TP',
-        //   price: '0.00',
-        //   avgPrice: '0.00',
-        //   origQty: '0.007',
-        //   executedQty: '0.000',
-        //   cumQty: '0.000',
-        //   cumQuote: '0.00000',
-        //   timeInForce: 'GTC',
-        //   type: 'TAKE_PROFIT_MARKET',
-        //   reduceOnly: true,
-        //   closePosition: false,
         //   side: 'SELL',
         //   positionSide: 'LONG',
-        //   stopPrice: '3059.51',
-        //   workingType: 'MARK_PRICE',
-        //   priceProtect: false,
-        //   origType: 'TAKE_PROFIT_MARKET',
-        //   priceMatch: 'NONE',
+        //   timeInForce: 'GTC',
+        //   quantity: '0.011',
+        //   algoStatus: 'NEW',
+        //   triggerPrice: '2060.54',
+        //   price: '0.00',
+        //   icebergQuantity: null,
         //   selfTradePreventionMode: 'EXPIRE_MAKER',
-        //   goodTillDate: 0,
-        //   updateTime: 1765111842380
+        //   workingType: 'MARK_PRICE',
+        //   priceMatch: 'NONE',
+        //   closePosition: false,
+        //   priceProtect: false,
+        //   reduceOnly: true,
+        //   createTime: 1785332017592,
+        //   updateTime: 1785332017596,
+        //   triggerTime: 0,
+        //   goodTillDate: 0
         // }
 
         //幣安帶單有下單速率限制20筆/10s, 每單至少500ms
