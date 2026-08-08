@@ -1,13 +1,13 @@
 {
   "name": "w-exchange-binance",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "main": "dist/w-exchange-binance.umd.js",
   "dependencies": {
     "@binance/common": "^2.4.5",
     "@binance/derivatives-trading-usds-futures": "^37.0.0",
     "@binance/spot": "^32.0.1",
     "json5": "^2.2.3",
-    "wsemi": "^1.8.68"
+    "wsemi": "^1.8.69"
   },
   "devDependencies": {
     "w-package-tools": "^1.1.12"
