@@ -1,16 +1,16 @@
 {
   "name": "w-exchange-binance",
-  "version": "1.0.12",
+  "version": "1.0.13",
   "main": "dist/w-exchange-binance.umd.js",
   "dependencies": {
     "@binance/common": "^2.4.5",
     "@binance/derivatives-trading-usds-futures": "^37.0.0",
     "@binance/spot": "^32.0.1",
     "json5": "^2.2.3",
-    "wsemi": "^1.8.77"
+    "wsemi": "^1.8.78"
   },
   "devDependencies": {
-    "w-package-tools": "^1.1.13"
+    "w-package-tools": "^1.1.14"
   },
   "scripts": {
     "test": "mocha --timeout 60000",
