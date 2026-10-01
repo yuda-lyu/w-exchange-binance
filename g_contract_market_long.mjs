@@ -12,7 +12,7 @@ let main = async() => {
 
     let tdid = `tdid-${nowTpeStrp()}-${w.genID(6)}`
 
-    let uTrade = 22 //etc名義最小下單價值(notional)為20u, 最小下單量為0.001顆, 若etc當前價3000u, 最小下單量(0.001*3000=3u), 故主要由名義價值20u主導, 考慮止損5%後要滿足, 設定最每單基礎下單價22u
+    let uTrade = 22 //etc名義最小下單價值(notional)為20u, 最小下單量為0.001顆, 若etc當前價3000u, 最小下單量(0.001*3000=3u), 故主要由名義價值20u主導, 數量向下取整至0.001後名義若不足20u由opBinaContractMarket補1個step, 止盈止損為reduce-only不受名義下限限制, 設定最每單基礎下單價22u
     console.log('uTrade', uTrade)
 
     let rTakeProfit = 0.004

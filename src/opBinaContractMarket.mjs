@@ -8,6 +8,7 @@ import isestr from 'wsemi/src/isestr.mjs'
 import isnum from 'wsemi/src/isnum.mjs'
 import { DerivativesTradingUsdsFutures } from '@binance/derivatives-trading-usds-futures'
 import { BadRequestError } from '@binance/common'
+import calcContractQuantity, { checkUTradeNotional } from './calcContractQuantity.mjs'
 
 
 let opBinaContractMarket = async(st, ott, mode, tdid, uTrade, rTakeProfit, rStopLoss, opt = {}) => {
@@ -40,6 +41,7 @@ let opBinaContractMarket = async(st, ott, mode, tdid, uTrade, rTakeProfit, rStop
     let quantityLow = get(st, 'quantityLow', '')
     let digPrice = get(st, 'digPrice', '')
     let digContractQuantity = get(st, 'digContractQuantity', '')
+    let notional = get(st, 'notional', '') //最小名義價值(交易所MIN_NOTIONAL), 未設定則不檢不補量
     // console.log('API_KEY', API_KEY)
     // console.log('API_SECRET', API_SECRET)
     // console.log('SYMBOL', SYMBOL)
@@ -47,6 +49,7 @@ let opBinaContractMarket = async(st, ott, mode, tdid, uTrade, rTakeProfit, rStop
     // console.log('quantityLow', quantityLow)
     // console.log('digPrice', digPrice)
     // console.log('digContractQuantity', digContractQuantity)
+    // console.log('notional', notional)
 
     //check mode
     if (mode !== 'long' && mode !== 'short') {
@@ -67,6 +70,9 @@ let opBinaContractMarket = async(st, ott, mode, tdid, uTrade, rTakeProfit, rStop
         throw new Error(`uTrade[${uTrade}] < uTradeDef[${uTradeDef}]`)
     }
     uTrade = dig(uTrade, 2)
+
+    //check notional, uTrade須不低於最小名義價值, 於任何API呼叫前先檢
+    checkUTradeNotional(uTrade, notional)
 
     //check rTakeProfit
     if (!isnum(rTakeProfit)) {
@@ -234,17 +240,9 @@ let opBinaContractMarket = async(st, ott, mode, tdid, uTrade, rTakeProfit, rStop
     priceStopLoss = dig(priceStopLoss, digPrice)
     // console.log('priceStopLoss', priceStopLoss)
 
-    //quantity
-    //須用10**x次方而非10^x: JS的^是XOR會把quantity數量級錯位(例:0.009變3顆), 下一行dig只截位數救不了
-    let quantity = uTrade / cdbl(price)
-    quantity = Math.floor(quantity * (10 ** digContractQuantity)) / (10 ** digContractQuantity)
-    quantity = dig(quantity, digContractQuantity)
+    //quantity, 向下取整至step, 名義(標記價*數量)不足notional時只補1個step, 不足quantityLow拋錯
+    let quantity = calcContractQuantity(uTrade, price, digContractQuantity, { quantityLow, notional })
     // console.log('quantity', quantity)
-
-    //check
-    if (cdbl(quantity) < cdbl(quantityLow)) {
-        throw new Error(`quantity[${quantity}] < quantityLow[${quantityLow}]`)
-    }
 
     //uCost
     let uCost = cdbl(price) * cdbl(quantity)

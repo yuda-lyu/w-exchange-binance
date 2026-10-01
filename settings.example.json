@@ -6,8 +6,8 @@
     symbol: 'ETHUSDT',
     interval: '4hr',
 
-    uTrade: 22, //考慮下單名義價值(notional)與最小下單數量(quantityLow), 設定每次下單基礎金額
-    notional: 20, //名義最小下單量(notional)為20u
+    uTrade: 22, //考慮下單名義價值(notional)與最小下單數量(quantityLow), 設定每次下單基礎金額, 須>=notional. 數量向下取整至step, 取整後名義不足notional時補1個step, 故實際名義(uTradeReal)介於notional與uTrade+價格*step之間
+    notional: 20, //名義最小下單量(notional)為20u, 對應交易所MIN_NOTIONAL且依商品而異(2026-10-01主網ETHUSDT為20、BTCUSDT為50), 由opBinaContractMarket於進場時檢查與補量, 未設定則不檢
     quantityLow: 0.001,
     digPrice: 2,
     digSpotQuantity: 4, //現貨3位

@@ -77,6 +77,7 @@ let main = async() => {
     //   timeInForce: [ 'GTC', 'IOC', 'FOK', 'GTX', 'GTD' ],
     //   permissionSets: [ 'GRID', 'COPY' ]
     // }
+    //註: 上列含MAX_NUM_ALGO_ORDERS, 為2025-12-29前之輸出; 2025-12-29起exchangeInfo已移除MAX_NUM_ALGO_ORDERS, 條件單上限改為全帳號跨商品共200; 2026-10-01實取主網ETHUSDT之MAX_NUM_ORDERS為200、MIN_NOTIONAL為20
 
 }
 await main()
