@@ -3,71 +3,79 @@ import cdbl from 'wsemi/src/cdbl.mjs'
 import cstr from 'wsemi/src/cstr.mjs'
 import delay from 'wsemi/src/delay.mjs'
 import dig from 'wsemi/src/dig.mjs'
-import isbol from 'wsemi/src/isbol.mjs'
-import isestr from 'wsemi/src/isestr.mjs'
-import isnum from 'wsemi/src/isnum.mjs'
-import { DerivativesTradingUsdsFutures } from '@binance/derivatives-trading-usds-futures'
-import { BadRequestError } from '@binance/common'
+import isenum from 'wsemi/src/isenum.mjs'
+import isfun from 'wsemi/src/isfun.mjs'
+import isp0int from 'wsemi/src/isp0int.mjs'
+import binaInFlight from './binaInFlight.mjs'
 import calcContractQuantity, { checkUTradeNotional } from './calcContractQuantity.mjs'
+import callBinaRead from './callBinaRead.mjs'
+import { BinaOpError, classifyBinaErr, sendBina, shapeCode200, shapeEntry, shapeLeverage, shapeMark, shapePositions, toBinanceInfo } from './classifyBinaErr.mjs'
+import getBinaClient from './getBinaClient.mjs'
+import placeBinaProtect, { GAP_MS, getProtectOutcome } from './placeBinaProtect.mjs'
+import { readBinaAlgo, readBinaOrder } from './readBinaLeg.mjs'
+import reconcileBinaOrder, { getPosAmt } from './reconcileBinaOrder.mjs'
 
 
+//tdid不含底線: 殘單與歷史依字尾解析; 加_ENTRY不超過幣安之36字元上限
+let REG_TDID = /^[.A-Z:/a-z0-9-]{1,30}$/
+
+
+/**
+ * 合約市價進場並掛止損止盈, 全程皆成才回傳, 其餘一律拋BinaOpError
+ *
+ * err.outcome:
+ * - TDID_IN_FLIGHT, TDID_USED: 本次未送單(err.state.sentThisCall為false); 前次可能已成交, 見err.state(TDID_IN_FLIGHT之前次狀態在err.state.previous), 不得換新ID重下
+ * - NOT_ENTERED: err.state.stage為precheck、setup、mark、deadline、entry, 本次未增加部位(不代表帳戶無部位)
+ * - ENTRY_UNKNOWN: 進場狀態未知, 未掛保護, 不得重送; 同程序內該tdid不釋放(再呼叫得TDID_IN_FLIGHT), 重啟後未過err.state.entry.conclusiveAfter不得重呼叫
+ * - ENTERED_PARTIAL_UNKNOWN: 已知部分成交而終局未明, 已嘗試以已知量掛保護, 兩腳結果須判err.state.sl、err.state.tp與err.state.protectOutcome(null為兩腳皆掛上)
+ * - ENTERED_SL_ONLY, ENTERED_TP_ONLY, ENTERED_UNPROTECTED, ENTERED_PROTECTION_UNKNOWN, ENTERED_POSITION_CHANGED: 進場已成交, 保護單未全部確認, 本函數不自動平倉, 須由呼叫端接手(可用opBinaContractPlaceProtection補掛); reason:conflict表同ID舊單量價不符而未掛
+ *
+ * err.execState: NOT_ENTERED為'notExecuted'(指本次), TDID類與ENTRY_UNKNOWN為'unknown', ENTERED類為'executed'
+ *
+ * 呼叫端義務: 呼叫前把tdid與意圖落盤; tdid須全域唯一, 查得0成交終局者再呼叫得TDID_USED, 須換新; 不得以Promise.race包裝本操作後另起新tdid(外層放棄不會中止已送之單)
+ *
+ * 成功回傳之quantity為實際成交量, uTradeReal以成交量計, priceStart仍為標記價
+ *
+ * 觀察回調事件見callBinaRead、reconcileBinaOrder、placeBinaProtect
+ *
+ * @param {Object} st 設定物件
+ * @param {Function} ott 時間函數
+ * @param {String} mode 'long'或'short'
+ * @param {String} tdid 交易識別字, ^[.A-Z:/a-z0-9-]{1,30}$
+ * @param {Number|String} uTrade 下單金額(有效數字)
+ * @param {Number|String} rTakeProfit 止盈比例, 大於0小於0.25
+ * @param {Number|String} rStopLoss 止損比例, 大於0小於0.15
+ * @param {Object} [opt={}] forceTest, setLever, setCrossMargin, setDualSide, entryDeadlineMs(進場前已超過此毫秒即不送單), onTrace
+ * @returns {Promise} resolve成功結果, reject BinaOpError
+ */
 let opBinaContractMarket = async(st, ott, mode, tdid, uTrade, rTakeProfit, rStopLoss, opt = {}) => {
 
-    //forceTest
-    let forceTest = get(opt, 'forceTest', null)
+    let tStart = performance.now()
 
-    //params
-    let forTestAll = get(st, 'forTestAll', null)
-    let forTest = get(st, 'binance.forTest', null)
-    if (isbol(forceTest)) {
-        forTest = forceTest
+    //check ott
+    if (!isfun(ott)) {
+        throw new Error(`invalid ott: must be a function`)
     }
-    else if (isbol(forTestAll)) {
-        forTest = forTestAll
-    }
-    else if (!isbol(forTest)) {
-        forTest = true
-    }
-    let keyApiContract = 'apiContract'
-    if (forTest) {
-        keyApiContract = 'apiContractTest'
-    }
-    //basePath 由 settings 決定: forTest=true 用 binance.basePathTest (測試端點); forTest=false 用 binance.basePath (正式端點)
-    let basePath = forTest ? get(st, 'binance.basePathTest', '') : get(st, 'binance.basePath', '')
-    let API_KEY = get(st, `binance.${keyApiContract}.key`, '')
-    let API_SECRET = get(st, `binance.${keyApiContract}.secret`, '')
-    let SYMBOL = get(st, 'symbol', '')
-    let uTradeDef = get(st, 'uTrade', '')
-    let quantityLow = get(st, 'quantityLow', '')
-    let digPrice = get(st, 'digPrice', '')
-    let digContractQuantity = get(st, 'digContractQuantity', '')
-    let notional = get(st, 'notional', '') //最小名義價值(交易所MIN_NOTIONAL), 未設定則不檢不補量
-    // console.log('API_KEY', API_KEY)
-    // console.log('API_SECRET', API_SECRET)
-    // console.log('SYMBOL', SYMBOL)
-    // console.log('uTradeDef', uTradeDef)
-    // console.log('quantityLow', quantityLow)
-    // console.log('digPrice', digPrice)
-    // console.log('digContractQuantity', digContractQuantity)
-    // console.log('notional', notional)
 
     //check mode
     if (mode !== 'long' && mode !== 'short') {
-        throw new Error(`invalid mode[${mode}]`)
+        throw new Error(`invalid mode: must be 'long' or 'short'`)
     }
 
     //check tdid
-    if (!isestr(tdid)) {
-        throw new Error(`invalid tdid[${tdid}]`)
+    if (typeof tdid !== 'string' || !REG_TDID.test(tdid)) {
+        throw new Error(`invalid tdid: must be a string of 1 to 30 characters from A-Z a-z 0-9 . : / -`)
     }
 
     //check uTrade
-    if (!isnum(uTrade)) {
-        throw new Error(`invalid uTrade[${uTrade}]`)
+    let uTradeDef = get(st, 'uTrade', '')
+    let notional = get(st, 'notional', '') //最小名義價值(交易所MIN_NOTIONAL), 未設定則不檢不補量
+    if (!isenum(uTrade)) {
+        throw new Error(`invalid uTrade: must be a valid number`)
     }
     uTrade = cdbl(uTrade)
     if (uTrade < cdbl(uTradeDef)) {
-        throw new Error(`uTrade[${uTrade}] < uTradeDef[${uTradeDef}]`)
+        throw new Error(`invalid uTrade: must not be less than st.uTrade`)
     }
     uTrade = dig(uTrade, 2)
 
@@ -75,422 +83,388 @@ let opBinaContractMarket = async(st, ott, mode, tdid, uTrade, rTakeProfit, rStop
     checkUTradeNotional(uTrade, notional)
 
     //check rTakeProfit
-    if (!isnum(rTakeProfit)) {
-        throw new Error(`invalid rTakeProfit[${rTakeProfit}]`)
+    if (!isenum(rTakeProfit) || cdbl(rTakeProfit) <= 0 || cdbl(rTakeProfit) >= 0.25) {
+        throw new Error(`invalid rTakeProfit: must be a number greater than 0 and less than 0.25`)
     }
     rTakeProfit = cdbl(rTakeProfit)
-    if (rTakeProfit <= 0) {
-        throw new Error(`rTakeProfit[${rTakeProfit}] <= 0`)
-    }
-    if (rTakeProfit >= 0.25) {
-        throw new Error(`rTakeProfit[${rTakeProfit}] >= 0.25`)
-    }
 
     //check rStopLoss
-    if (!isnum(rStopLoss)) {
-        throw new Error(`invalid rStopLoss[${rStopLoss}]`)
+    if (!isenum(rStopLoss) || cdbl(rStopLoss) <= 0 || cdbl(rStopLoss) >= 0.15) {
+        throw new Error(`invalid rStopLoss: must be a number greater than 0 and less than 0.15`)
     }
     rStopLoss = cdbl(rStopLoss)
-    if (rStopLoss <= 0) {
-        throw new Error(`rStopLoss[${rStopLoss}] <= 0`)
+
+    //check settings
+    let quantityLow = get(st, 'quantityLow', '')
+    let digPrice = get(st, 'digPrice', '')
+    let digContractQuantity = get(st, 'digContractQuantity', '')
+    if (!isp0int(digPrice)) {
+        throw new Error(`invalid st.digPrice: must be a non-negative integer`)
     }
-    if (rStopLoss >= 0.15) {
-        throw new Error(`rStopLoss[${rStopLoss}] >= 0.15`)
+    if (!isp0int(digContractQuantity)) {
+        throw new Error(`invalid st.digContractQuantity: must be a non-negative integer`)
     }
 
-    //setLever
-    let setLever = get(opt, 'setLever', false)
-
-    //setCrossMargin
-    let setCrossMargin = get(opt, 'setCrossMargin', false)
-
-    //setDualSide
-    let setDualSide = get(opt, 'setDualSide', false)
+    //opt, 非預期視為未給
+    let setLever = get(opt, 'setLever', false) === true
+    let setCrossMargin = get(opt, 'setCrossMargin', false) === true
+    let setDualSide = get(opt, 'setDualSide', false) === true
+    let entryDeadlineMs = get(opt, 'entryDeadlineMs', null)
+    if (!isenum(entryDeadlineMs) || cdbl(entryDeadlineMs) <= 0) {
+        entryDeadlineMs = null
+    }
+    let onTrace = get(opt, 'onTrace', null)
 
     //client
-    let configurationRestAPI = {
-        apiKey: API_KEY,
-        apiSecret: API_SECRET,
-        basePath,
-    }
-    let client = new DerivativesTradingUsdsFutures({ configurationRestAPI })
+    let { client, SYMBOL, basePath, recvWindow } = getBinaClient(st, opt)
 
-    // console.log('keys(client.restAPI)', keys(client.restAPI))
-    // keys(client.restAPI) [
-    //   'configuration',
-    //   'accountApi', //找不到此方法
-    //   'convertApi',
-    //   'marketDataApi',
-    //   'portfolioMarginEndpointsApi',
-    //   'tradeApi',
-    //   'userDataStreamsApi'
-    // ]
+    //idir, sideIn, sideOut, pos
+    let idir = mode === 'short' ? -1 : 1
+    let sideIn = mode === 'short' ? 'SELL' : 'BUY'
+    let sideOut = mode === 'short' ? 'BUY' : 'SELL'
+    let pos = mode === 'short' ? 'SHORT' : 'LONG'
 
-    //cgL, 槓桿改為1x
-    if (setLever) {
-        try {
-            let cgLg = await client.restAPI.changeInitialLeverage({
-                symbol: SYMBOL,
-                leverage: 1,
-            })
-            await cgLg.data()
-            // let cgL = await cgLg.data()
-            // console.log('cgL', cgL)
-            // cgL { symbol: 'ETHUSDT', leverage: 1, maxNotionalValue: '300000000' }
-        }
-        catch (err) {
-            if (err instanceof BadRequestError && err.message?.includes('No need to change')) {
-                // 槓桿已設定為目標值, 可安全忽略
-            }
-            else {
-                throw err
-            }
-        }
+    //cid
+    let cidEntry = `${tdid}_ENTRY`
+    let cidSl = `${tdid}_SL`
+    let cidTp = `${tdid}_TP`
+
+    //state, 拋錯時帶給呼叫端
+    let state = {
+        tdid,
+        stage: null,
+        setup: {},
+        entry: { status: 'notSent', orderId: null, clientOrderId: cidEntry, executedQty: null, maxExecutedQty: null, tSign: null, conclusiveAfter: null, confirmedBy: null, reason: null, res: null },
+        sl: { status: 'notSent', algoId: null, clientAlgoId: cidSl, reason: null, tSign: null, conclusiveAfter: null, res: null },
+        tp: { status: 'notSent', algoId: null, clientAlgoId: cidTp, reason: null, tSign: null, conclusiveAfter: null, res: null },
     }
 
-    //chM, 使用全倉
-    if (setCrossMargin) {
-        try {
-            let chMt = await client.restAPI.changeMarginType({
-                symbol: SYMBOL,
-                marginType: 'CROSSED', //使用全倉保證金
-            })
-            await chMt.data()
-            // let chM = await chMt.data()
-            // console.log('chM', chM)
-        }
-        catch (err) {
-            if (err instanceof BadRequestError && err.message?.includes('No need to change')) {
-                // 已是 CROSSED, 可安全忽略
-            }
-            else {
-                throw err
-            }
-        }
+    let fail = (outcome, execState, err = null) => {
+        let info = err ? classifyBinaErr(err) : null
+        return new BinaOpError(`opBinaContractMarket failed: ${outcome}`, {
+            outcome,
+            execState,
+            state,
+            binance: err && err.binance ? err.binance : (info ? toBinanceInfo(info) : null),
+            cause: err || undefined,
+        })
     }
 
-    //chPt
-    if (setDualSide) {
-        try {
-            let chPt = await client.restAPI.changePositionMode({
-                dualSidePosition: true, //同時存在多空倉位(Hedge mode)
-            })
-            await chPt.data()
-            // let chP = await chPt.data()
-            // console.log('chP', chP)
-        }
-        catch (err) {
-            if (err instanceof BadRequestError && err.message?.includes('No need to change')) {
-                // 已是 hedge mode, 可安全忽略
-            }
-            else {
-                throw err
-            }
-        }
+    let notEntered = (stage, err = null) => {
+        state.stage = stage
+        return fail('NOT_ENTERED', 'notExecuted', err)
     }
 
-    //mkp
-    let mkpr = await client.restAPI.markPrice({ symbol: SYMBOL })
-    let mkp = await mkpr.data()
-    // console.log('mkp', mkp)
-    // mkp {
-    //   symbol: 'ETHUSDT',
-    //   markPrice: '3036.72000000',
-    //   indexPrice: '3038.14441860',
-    //   estimatedSettlePrice: '3036.44400385',
-    //   lastFundingRate: '0.00010000',
-    //   interestRate: '0.00010000',
-    //   nextFundingTime: 1765036800000,
-    //   time: 1765021406000
-    // }
-
-    //price
-    let price = get(mkp, 'markPrice', '')
-    if (!isnum(price)) {
-        throw new Error(`invalid price for ${SYMBOL}`)
+    //同程序在途防護, 與MarketEntry共用, 鍵為實際之進場ID
+    let keyInFlight = `${basePath}|${cidEntry}`
+    if (binaInFlight.has(keyInFlight)) {
+        state.sentThisCall = false
+        state.previous = binaInFlight.get(keyInFlight)
+        throw fail('TDID_IN_FLIGHT', 'unknown')
     }
+    binaInFlight.set(keyInFlight, state)
 
-    //idir
-    let idir = 1
-    if (mode === 'short') {
-        idir = -1
-    }
-
-    //sideIn, sideOut
-    let sideIn = 'BUY'
-    let sideOut = 'SELL'
-    if (mode === 'short') {
-        sideIn = 'SELL'
-        sideOut = 'BUY'
-    }
-
-    //pos
-    let pos = 'LONG'
-    if (mode === 'short') {
-        pos = 'SHORT'
-    }
-
-    //priceTakeProfit
-    let priceTakeProfit = (1 + idir * rTakeProfit) * cdbl(price) //下單設定止盈價格(USDT)
-    priceTakeProfit = dig(priceTakeProfit, digPrice)
-    // console.log('priceTakeProfit', priceTakeProfit)
-
-    //priceStopLoss
-    let priceStopLoss = (1 - idir * rStopLoss) * cdbl(price) //下單設定止損價格(USDT)
-    priceStopLoss = dig(priceStopLoss, digPrice)
-    // console.log('priceStopLoss', priceStopLoss)
-
-    //quantity, 向下取整至step, 名義(標記價*數量)不足notional時只補1個step, 不足quantityLow拋錯
-    let quantity = calcContractQuantity(uTrade, price, digContractQuantity, { quantityLow, notional })
-    // console.log('quantity', quantity)
-
-    //uCost
-    let uCost = cdbl(price) * cdbl(quantity)
-    uCost = dig(uCost, 2)
-    // console.log('uCost', uCost)
-
-    //市價做多或空
-    let resEntry = null
-    let resTp = null
-    let resSl = null
+    let keepInFlight = false
     try {
 
-        //做多或空
-        let rfEntry = await client.restAPI.newOrder({
+        //TDID閘: 同ID已成交後重送會被接受而部位加倍, 故送單前先查. -2013只代表本次未觀察到, 跨程序靠呼叫端落盤
+        let gate = await readBinaOrder({ client, symbol: SYMBOL, recvWindow, req: { origClientOrderId: cidEntry }, onTrace })
+        if (gate.found) {
+            let readLeg = async (legBase, clientAlgoId) => {
+                let res = await readBinaAlgo({ client, symbol: SYMBOL, recvWindow, req: { clientAlgoId }, onTrace })
+                let status = 'found'
+                if (!res.found) {
+                    status = res.errKind === 'NOT_OBSERVED' ? 'notObserved' : 'unknown'
+                }
+                return { ...legBase, status, algoId: res.found ? cstr(res.algoId) : null, res }
+            }
+            state.entry = { ...state.entry, status: 'found', orderId: cstr(gate.orderId), executedQty: gate.executedQty, res: gate }
+            state.sl = await readLeg(state.sl, cidSl)
+            state.tp = await readLeg(state.tp, cidTp)
+            state.sentThisCall = false
+            throw fail('TDID_USED', 'unknown')
+        }
+        if (gate.errKind !== 'NOT_OBSERVED') {
+            state.entry.reason = 'precheckFailed'
+            state.entry.precheck = { errKind: gate.errKind, code: gate.code, msg: gate.msg }
+            throw notEntered('precheck')
+        }
+
+        //帳戶設定, 冪等, 重呼叫安全; -4046、-4059判無須變更, 不比對字串
+        let runSetup = async (name, fn, shape) => {
+            try {
+                await sendBina(fn, shape)
+                state.setup[name] = 'changed'
+            }
+            catch (err) {
+                let info = classifyBinaErr(err)
+                if (info.kind === 'noChange') {
+                    state.setup[name] = 'unchanged'
+                    return
+                }
+                state.setup[name] = info.execState === 'notExecuted' ? 'rejected' : 'unknown'
+                throw notEntered('setup', err)
+            }
+        }
+
+        //槓桿改為1x
+        if (setLever) {
+            await runSetup('lever', () => client.restAPI.changeInitialLeverage({ symbol: SYMBOL, leverage: 1, recvWindow }), shapeLeverage)
+        }
+
+        //使用全倉
+        if (setCrossMargin) {
+            await runSetup('crossMargin', () => client.restAPI.changeMarginType({ symbol: SYMBOL, marginType: 'CROSSED', recvWindow }), shapeCode200)
+        }
+
+        //同時存在多空倉位(Hedge mode)
+        if (setDualSide) {
+            await runSetup('dualSide', () => client.restAPI.changePositionMode({ dualSidePosition: true, recvWindow }), shapeCode200)
+        }
+
+        //標記價與部位快照, 閘過後才讀, 止損止盈價才新
+        let price = null
+        let posBefore = null
+        try {
+            let rs = await Promise.all([
+                callBinaRead(() => client.restAPI.markPrice({ symbol: SYMBOL }), { name: 'markPrice', shape: shapeMark, onTrace }),
+                callBinaRead(() => client.restAPI.positionInformationV3({ symbol: SYMBOL, recvWindow }), { name: 'positionRisk', shape: shapePositions, onTrace }),
+            ])
+            price = get(rs[0], 'markPrice', '')
+            posBefore = getPosAmt(rs[1], pos)
+        }
+        catch (err) {
+            throw notEntered('mark', err)
+        }
+
+        //下單設定止盈止損價格(USDT)
+        let priceTakeProfit = dig((1 + idir * rTakeProfit) * cdbl(price), digPrice)
+        let priceStopLoss = dig((1 - idir * rStopLoss) * cdbl(price), digPrice)
+
+        //quantity, 向下取整至step, 名義(標記價*數量)不足notional時只補1個step, 不足quantityLow拋錯
+        let quantity = null
+        try {
+            quantity = calcContractQuantity(uTrade, price, digContractQuantity, { quantityLow, notional })
+        }
+        catch (err) {
+            state.entry.reason = 'quantityInvalid'
+            throw notEntered('mark', err)
+        }
+
+        //外層時限已過即不送單
+        if (entryDeadlineMs !== null && performance.now() - tStart > cdbl(entryDeadlineMs)) {
+            throw notEntered('deadline')
+        }
+
+        //進場, RESULT: 回應逐欄核驗, 非FILLED走回查. 進場單一律不重送(同ID依序重送會重複成交)
+        let tSign = performance.now()
+        let tSignWall = Date.now()
+        state.entry.tSign = tSignWall
+        let resEntry = null
+        let source = null
+        let seed = null
+        let errEntry = null
+        let notes = []
+        try {
+            resEntry = await sendBina(() => client.restAPI.newOrder({
+                symbol: SYMBOL,
+                side: sideIn,
+                positionSide: pos,
+                type: 'MARKET',
+                quantity,
+                newClientOrderId: cidEntry,
+                newOrderRespType: 'RESULT',
+                recvWindow,
+            }), shapeEntry(cidEntry))
+            if (resEntry.status !== 'FILLED' || cdbl(resEntry.executedQty) <= 0) {
+                source = 'server'
+                seed = resEntry
+            }
+        }
+        catch (err) {
+            let info = classifyBinaErr(err)
+            errEntry = err
+            if (info.kind === 'duplicate') {
+                state.entry.status = 'found'
+                state.sentThisCall = false
+                throw fail('TDID_USED', 'unknown', err)
+            }
+            if (info.execState === 'notExecuted') {
+                state.entry.status = 'rejected'
+                state.entry.reason = 'rejected'
+                state.entry.confirmedBy = 'rejectedByExchange'
+                throw notEntered('entry', err)
+            }
+            source = info.source
+        }
+
+        //回查
+        let executedQty = get(resEntry, 'executedQty', '0')
+        let bPartial = false
+        if (source !== null) {
+            let rec = await reconcileBinaOrder({
+                client,
+                symbol: SYMBOL,
+                cid: cidEntry,
+                side: sideIn,
+                positionSide: pos,
+                origQty: quantity,
+                posBefore,
+                tSign,
+                tSignWall,
+                source,
+                seed,
+                recvWindow,
+                onTrace,
+            })
+            state.entry.tSign = rec.tSign
+            state.entry.conclusiveAfter = rec.conclusiveAfter
+            state.entry.confirmedBy = rec.confirmedBy
+            state.entry.reason = rec.reason
+            state.entry.maxExecutedQty = rec.maxExecutedQty
+            state.entry.res = rec.order
+            if (rec.conclusion === 'terminalZero' || rec.conclusion === 'notExecuted') {
+                state.entry.status = 'notExecuted'
+                state.entry.executedQty = '0'
+                throw notEntered('entry')
+            }
+            if (rec.conclusion === 'unknown') {
+                state.entry.status = 'unknown'
+                keepInFlight = true
+                throw fail('ENTRY_UNKNOWN', 'unknown', errEntry)
+            }
+            if (rec.conclusion === 'partial') {
+                bPartial = true
+                keepInFlight = true
+                executedQty = rec.maxExecutedQty
+            }
+            else {
+                executedQty = rec.executedQty
+            }
+            resEntry = rec.order
+            notes.push('entry:reconciled')
+        }
+
+        state.entry.status = bPartial ? 'partial' : 'filled'
+        state.entry.orderId = cstr(get(resEntry, 'orderId', ''))
+        state.entry.executedQty = executedQty
+        state.entry.maxExecutedQty = executedQty
+        state.entry.res = resEntry
+
+        //止損止盈, 數量一律實際成交量
+        let protectBase = {
+            client,
             symbol: SYMBOL,
-            side: sideIn,
+            side: sideOut,
             positionSide: pos,
-            type: 'MARKET',
-            quantity,
-            newClientOrderId: `${tdid}_ENTRY`,
-        })
-        resEntry = await rfEntry.data()
-        // console.log('resEntry', resEntry)
-        // resEntry {
-        //   orderId: 14925106909,
-        //   symbol: 'ETHUSDT',
-        //   status: 'NEW',
-        //   clientOrderId: 'tdid-20260729213334-cB7pjm_ENTRY',
-        //   price: '0.00',
-        //   origQty: '0.011',
-        //   executedQty: '0.000',
-        //   cumQty: '0.000',
-        //   timeInForce: 'GTC',
-        //   type: 'MARKET',
-        //   reduceOnly: false,
-        //   closePosition: false,
-        //   side: 'BUY',
-        //   positionSide: 'LONG',
-        //   stopPrice: '0.00',
-        //   workingType: 'CONTRACT_PRICE',
-        //   priceProtect: false,
-        //   origType: 'MARKET',
-        //   priceMatch: 'NONE',
-        //   selfTradePreventionMode: 'EXPIRE_MAKER',
-        //   goodTillDate: 0,
-        //   updateTime: 1785332015881
-        // }
+            quantity: executedQty,
+            minPos: Math.abs(posBefore) + cdbl(executedQty), //重送前排除已觸發之基準: 進場後部位至少應有之量
+            recvWindow,
+            onTrace,
+        }
 
         //幣安帶單有下單速率限制20筆/10s, 每單至少500ms
-        await delay(600)
+        await delay(GAP_MS)
 
         //止損
         //2025-12-09起Binance將條件單(STOP_MARKET/TAKE_PROFIT_MARKET等)強制走algoOrder, 否則回-4120
-        //clientAlgoId限制 ^[\.A-Z\:/a-z0-9_-]{1,36}$, 目前tdid+'_SL'約29字接近上限
-        let clientAlgoIdSl = `${tdid}_SL`
-        if (clientAlgoIdSl.length > 36) {
-            throw new Error(`clientAlgoIdSl length ${clientAlgoIdSl.length} > 36`)
+        state.sl = await placeBinaProtect({ ...protectBase, cid: cidSl, type: 'STOP_MARKET', triggerPrice: priceStopLoss })
+
+        //止損triggered即不掛止盈: 部位已動, 孤單會反向
+        if (state.sl.status !== 'triggered') {
+
+            //幣安帶單有下單速率限制20筆/10s, 每單至少500ms
+            await delay(GAP_MS)
+
+            //止盈
+            state.tp = await placeBinaProtect({ ...protectBase, cid: cidTp, type: 'TAKE_PROFIT_MARKET', triggerPrice: priceTakeProfit })
+
+            //幣安帶單有下單速率限制20筆/10s, 每單至少500ms
+            await delay(GAP_MS)
+
         }
-        let rfSl = await client.restAPI.newAlgoOrder({
-            algoType: 'CONDITIONAL',
-            symbol: SYMBOL,
-            side: sideOut,
-            positionSide: pos,
-            type: 'STOP_MARKET',
-            triggerPrice: priceStopLoss, //原stopPrice
-            quantity,
-            // reduceOnly: true, //dualSidePosition=true不能給reduceOnly=true
-            workingType: 'MARK_PRICE',
-            clientAlgoId: clientAlgoIdSl, //原newClientOrderId
-        })
-        resSl = await rfSl.data()
-        // console.log('resSl', resSl)
-        // resSl {
-        //   algoId: 1000000149617632,
-        //   clientAlgoId: 'tdid-20260729213334-cB7pjm_SL',
-        //   algoType: 'CONDITIONAL',
-        //   orderType: 'STOP_MARKET',
-        //   symbol: 'ETHUSDT',
-        //   side: 'SELL',
-        //   positionSide: 'LONG',
-        //   timeInForce: 'GTC',
-        //   quantity: '0.011',
-        //   algoStatus: 'NEW',
-        //   triggerPrice: '1812.52',
-        //   price: '0.00',
-        //   icebergQuantity: null,
-        //   selfTradePreventionMode: 'EXPIRE_MAKER',
-        //   workingType: 'MARK_PRICE',
-        //   priceMatch: 'NONE',
-        //   closePosition: false,
-        //   priceProtect: false,
-        //   reduceOnly: true,
-        //   createTime: 1785332016734,
-        //   updateTime: 1785332016734,
-        //   triggerTime: 0,
-        //   goodTillDate: 0
-        // }
 
-        //幣安帶單有下單速率限制20筆/10s, 每單至少500ms
-        await delay(600)
-
-        //止盈
-        //2025-12-09起Binance將條件單(STOP_MARKET/TAKE_PROFIT_MARKET等)強制走algoOrder, 否則回-4120
-        //clientAlgoId限制 ^[\.A-Z\:/a-z0-9_-]{1,36}$, 目前tdid+'_TP'約29字接近上限
-        let clientAlgoIdTp = `${tdid}_TP`
-        if (clientAlgoIdTp.length > 36) {
-            throw new Error(`clientAlgoIdTp length ${clientAlgoIdTp.length} > 36`)
+        let outcome = getProtectOutcome(state.sl, state.tp)
+        state.protectOutcome = outcome
+        if (bPartial) {
+            throw fail('ENTERED_PARTIAL_UNKNOWN', 'executed')
         }
-        let rfTp = await client.restAPI.newAlgoOrder({
-            algoType: 'CONDITIONAL',
+        if (outcome !== null) {
+            throw fail(outcome, 'executed')
+        }
+
+        //SDK將大於Number.MAX_SAFE_INTEGER的整數parse為bigint, 故ID統一cstr()持有
+        let idEntry = cstr(get(resEntry, 'orderId', ''))
+        let idTp = state.tp.algoId
+        let idSl = state.sl.algoId
+        let resTp = state.tp.res
+        let resSl = state.sl.res
+
+        //uCost
+        let uCost = dig(cdbl(price) * cdbl(executedQty), 2)
+
+        //time, 此時部位與兩腳皆已成立, 呼叫端傳入之時間函數失敗不得讓結果遺失
+        let time = ''
+        try {
+            time = ott(get(resEntry, 'updateTime', '')).format('YYYY-MM-DDTHH:mm:ss')
+        }
+        catch (err) {
+            notes.push('timeStart:formatFailed')
+        }
+
+        return {
+
+            mode,
+
             symbol: SYMBOL,
-            side: sideOut,
-            positionSide: pos,
-            type: 'TAKE_PROFIT_MARKET',
-            triggerPrice: priceTakeProfit, //原stopPrice
-            quantity,
-            // reduceOnly: true, //dualSidePosition=true不能給reduceOnly=true
-            workingType: 'MARK_PRICE',
-            clientAlgoId: clientAlgoIdTp, //原newClientOrderId
-        })
-        resTp = await rfTp.data()
-        // console.log('resTp', resTp)
-        // resTp {
-        //   algoId: 1000000149617643,
-        //   clientAlgoId: 'tdid-20260729213334-cB7pjm_TP',
-        //   algoType: 'CONDITIONAL',
-        //   orderType: 'TAKE_PROFIT_MARKET',
-        //   symbol: 'ETHUSDT',
-        //   side: 'SELL',
-        //   positionSide: 'LONG',
-        //   timeInForce: 'GTC',
-        //   quantity: '0.011',
-        //   algoStatus: 'NEW',
-        //   triggerPrice: '2060.54',
-        //   price: '0.00',
-        //   icebergQuantity: null,
-        //   selfTradePreventionMode: 'EXPIRE_MAKER',
-        //   workingType: 'MARK_PRICE',
-        //   priceMatch: 'NONE',
-        //   closePosition: false,
-        //   priceProtect: false,
-        //   reduceOnly: true,
-        //   createTime: 1785332017592,
-        //   updateTime: 1785332017596,
-        //   triggerTime: 0,
-        //   goodTillDate: 0
-        // }
 
-        //幣安帶單有下單速率限制20筆/10s, 每單至少500ms
-        await delay(600)
+            quantity: executedQty,
 
-    }
-    catch (err) {
-        //部分狀態掛到err, 供呼叫端區分失敗發生於哪個階段(entry/TP/SL)
-        err.resEntry = resEntry
-        err.resTp = resTp
-        err.resSl = resSl
-        console.log(err)
-        throw err
-    }
+            timeStart: time,
+            priceStart: price,
+            uTrade,
+            uTradeReal: uCost,
 
-    //SDK將大於Number.MAX_SAFE_INTEGER的整數parse為bigint, cint(BigInt)===0會把ID歸零, 故統一cstr()持有
-    let idEntry = get(resEntry, 'orderId', null)
-    if (idEntry === null || idEntry === undefined || idEntry === '') {
-        throw new Error(`invalid resEntry.orderId`)
-    }
-    idEntry = cstr(idEntry)
+            rTakeProfit,
+            priceTakeProfit,
 
-    //algo單回應欄位是algoId / clientAlgoId, 不是orderId / clientOrderId
-    let idTp = get(resTp, 'algoId', null)
-    if (idTp === null || idTp === undefined || idTp === '') {
-        throw new Error(`invalid resTp.algoId`)
-    }
-    idTp = cstr(idTp)
+            rStopLoss,
+            priceStopLoss,
 
-    let idSl = get(resSl, 'algoId', null)
-    if (idSl === null || idSl === undefined || idSl === '') {
-        throw new Error(`invalid resSl.algoId`)
-    }
-    idSl = cstr(idSl)
+            idTrade: tdid,
+            idEntry,
+            idTp, //實際是algoId(已String化), 保留欄位名供下游零改動
+            idSl, //實際是algoId(已String化), 保留欄位名供下游零改動
 
-    let clientOrderIdEntry = get(resEntry, 'clientOrderId', '')
-    if (!isestr(clientOrderIdEntry)) {
-        throw new Error(`invalid resEntry.clientOrderId`)
-    }
+            clientOrderIdEntry: cidEntry,
+            clientOrderIdTp: cidTp, //實際是clientAlgoId, 保留欄位名供下游零改動
+            clientOrderIdSl: cidSl, //實際是clientAlgoId, 保留欄位名供下游零改動
 
-    let clientOrderIdTp = get(resTp, 'clientAlgoId', '')
-    if (!isestr(clientOrderIdTp)) {
-        throw new Error(`invalid resTp.clientAlgoId`)
-    }
+            //algo專用語意欄位, 取消時依此判斷走普通還是algo路徑
+            isAlgoTp: true,
+            isAlgoSl: true,
+            algoIdTp: idTp,
+            algoIdSl: idSl,
+            clientAlgoIdTp: cidTp,
+            clientAlgoIdSl: cidSl,
 
-    let clientOrderIdSl = get(resSl, 'clientAlgoId', '')
-    if (!isestr(clientOrderIdSl)) {
-        throw new Error(`invalid resSl.clientAlgoId`)
-    }
+            resEntry,
+            resTp,
+            resSl,
 
-    //time
-    let transactionTime = get(resEntry, 'updateTime', '')
-    let time = ott(transactionTime).format('YYYY-MM-DDTHH:mm:ss')
+            notes,
 
-    //symbol
-    let symbol = SYMBOL
-
-    //r
-    let r = {
-
-        mode,
-
-        symbol,
-
-        quantity,
-
-        timeStart: time,
-        priceStart: price,
-        uTrade,
-        uTradeReal: uCost,
-
-        rTakeProfit,
-        priceTakeProfit,
-
-        rStopLoss,
-        priceStopLoss,
-
-        idTrade: tdid,
-        idEntry,
-        idTp, //實際是algoId(已String化), 保留欄位名供下游零改動
-        idSl, //實際是algoId(已String化), 保留欄位名供下游零改動
-
-        clientOrderIdEntry,
-        clientOrderIdTp, //實際是clientAlgoId, 保留欄位名供下游零改動
-        clientOrderIdSl, //實際是clientAlgoId, 保留欄位名供下游零改動
-
-        //algo專用語意欄位, 取消時依此判斷走普通還是algo路徑
-        isAlgoTp: true,
-        isAlgoSl: true,
-        algoIdTp: idTp,
-        algoIdSl: idSl,
-        clientAlgoIdTp: clientOrderIdTp,
-        clientAlgoIdSl: clientOrderIdSl,
-
-        resEntry,
-        resTp,
-        resSl,
+        }
 
     }
+    finally {
+        if (!keepInFlight) {
+            binaInFlight.delete(keyInFlight)
+        }
+    }
 
-    return r
 }
 
 
+export { REG_TDID }
 export default opBinaContractMarket

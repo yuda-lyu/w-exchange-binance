@@ -24,7 +24,7 @@ let checkUTradeNotional = (uTrade, notional) => {
         return
     }
     if (cdbl(uTrade) < cdbl(notional)) {
-        throw new Error(`uTrade[${uTrade}] < notional[${notional}]`)
+        throw new Error(`invalid uTrade: must not be less than notional`)
     }
 }
 
@@ -42,13 +42,13 @@ let calcContractQuantity = (uTrade, price, digContractQuantity, opt = {}) => {
 
     //check
     if (!isnum(uTrade) || cdbl(uTrade) <= 0) {
-        throw new Error(`invalid uTrade[${uTrade}]`)
+        throw new Error(`invalid uTrade: must be a positive number`)
     }
     if (!isnum(price) || cdbl(price) <= 0) {
-        throw new Error(`invalid price[${price}]`)
+        throw new Error(`invalid price: must be a positive number`)
     }
     if (!isp0int(digContractQuantity)) {
-        throw new Error(`invalid digContractQuantity[${digContractQuantity}]`)
+        throw new Error(`invalid digContractQuantity: must be a non-negative integer`)
     }
     checkUTradeNotional(uTrade, notional)
 
@@ -69,10 +69,10 @@ let calcContractQuantity = (uTrade, price, digContractQuantity, opt = {}) => {
 
     //check quantityLow, 不足則拋錯不補量
     if (cdbl(quantity) < cdbl(quantityLow)) {
-        throw new Error(`quantity[${quantity}] < quantityLow[${quantityLow}]`)
+        throw new Error(`invalid quantity: must not be less than quantityLow`)
     }
     if (k <= BigInt(0)) {
-        throw new Error(`quantity[${quantity}] <= 0`)
+        throw new Error(`invalid quantity: must be greater than 0`)
     }
 
     //補量, 名義<notional等價於P*k<N*D
@@ -84,7 +84,7 @@ let calcContractQuantity = (uTrade, price, digContractQuantity, opt = {}) => {
         }
         //補1個step後必滿足, 此處防呆避免送出必被拒之單
         if (P * k < N * D) {
-            throw new Error(`price[${price}] * quantity[${quantity}] < notional[${notional}]`)
+            throw new Error(`invalid quantity: price times quantity must not be less than notional`)
         }
     }
 

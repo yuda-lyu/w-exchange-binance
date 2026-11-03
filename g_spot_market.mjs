@@ -18,7 +18,9 @@ let main = async() => {
     let rStopLoss = 0.01
     console.log('rStopLoss', rStopLoss)
 
-    let res = await webina.opBinaSpotMarket(st, ott, uTrade, rTakeProfit, rStopLoss)
+    let tdid = `tdid-${Date.now()}` //必傳, 實際ID為tdid_BUY、tdid_OCO; 依forTest選端點與金鑰, 預設測試端點
+
+    let res = await webina.opBinaSpotMarket(st, ott, tdid, uTrade, rTakeProfit, rStopLoss)
     console.log('res', res)
     // res {
     //   id: 17235633322,

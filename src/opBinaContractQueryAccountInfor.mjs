@@ -1,45 +1,23 @@
 import get from 'lodash-es/get.js'
-import isbol from 'wsemi/src/isbol.mjs'
-import { DerivativesTradingUsdsFutures } from '@binance/derivatives-trading-usds-futures'
+import callBinaRead from './callBinaRead.mjs'
+import { shapeObj } from './classifyBinaErr.mjs'
+import getBinaClient from './getBinaClient.mjs'
 
 
+/**
+ * 查帳戶資訊, 讀取失敗拋BinaOpError(err.execState、err.binance.attempts)
+ *
+ * @param {Object} st 設定物件
+ * @param {Object} [opt={}] forceTest, onTrace
+ * @returns {Promise} resolve帳戶資訊
+ */
 let opBinaContractQueryAccountInfor = async(st, opt = {}) => {
 
-    //params
-    let forceTest = get(opt, 'forceTest', null)
-    let forTestAll = get(st, 'forTestAll', null)
-    let forTest = get(st, 'binance.forTest', null)
-    if (isbol(forceTest)) {
-        forTest = forceTest
-    }
-    else if (isbol(forTestAll)) {
-        forTest = forTestAll
-    }
-    else if (!isbol(forTest)) {
-        forTest = true
-    }
-    let keyApiContract = 'apiContract'
-    if (forTest) {
-        keyApiContract = 'apiContractTest'
-    }
-    //basePath 由 settings 決定: forTest=true 用 binance.basePathTest (測試端點); forTest=false 用 binance.basePath (正式端點)
-    let basePath = forTest ? get(st, 'binance.basePathTest', '') : get(st, 'binance.basePath', '')
-    let API_KEY = get(st, `binance.${keyApiContract}.key`, '')
-    let API_SECRET = get(st, `binance.${keyApiContract}.secret`, '')
-    // console.log('API_KEY', API_KEY)
-    // console.log('API_SECRET', API_SECRET)
-
     //client
-    let configurationRestAPI = {
-        apiKey: API_KEY,
-        apiSecret: API_SECRET,
-        basePath,
-    }
-    let client = new DerivativesTradingUsdsFutures({ configurationRestAPI })
+    let { client, recvWindow } = getBinaClient(st, opt, { useSymbol: false })
 
-    //acInfom
-    let acInfom = await client.restAPI.accountInformationV3()
-    let acInfo = await acInfom.data()
+    //acInfo
+    let acInfo = await callBinaRead(() => client.restAPI.accountInformationV3({ recvWindow }), { name: 'account', shape: shapeObj, onTrace: get(opt, 'onTrace', null) })
     // console.log('acInfo', acInfo)
     // acInfo {
     //   totalInitialMargin: '0.00000000',

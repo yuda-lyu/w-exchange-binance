@@ -5,6 +5,8 @@ import webina from './src/WExchangeBinance.mjs'
 
 
 //幣安合約市價做空
+//全程皆成才回傳; 其餘拋BinaOpError, 依err.outcome分流(見README之Breaking changes), ENTRY_UNKNOWN不得重下
+//註: 下方res範例為舊版輸出; 現行resEntry為RESULT回應(status:'FILLED', executedQty為實際成交量, 無avgPrice、cumQuote), idEntry、idTp、idSl為字串, 另有notes, resTp、resSl為algo單回應
 
 let st = getSettings()
 

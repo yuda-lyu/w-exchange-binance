@@ -1,68 +1,81 @@
 import get from 'lodash-es/get.js'
 import cdbl from 'wsemi/src/cdbl.mjs'
 import dig from 'wsemi/src/dig.mjs'
-import haskey from 'wsemi/src/haskey.mjs'
-import isnum from 'wsemi/src/isnum.mjs'
-import { Spot } from '@binance/spot'
+import isenum from 'wsemi/src/isenum.mjs'
+import isfun from 'wsemi/src/isfun.mjs'
+import isp0int from 'wsemi/src/isp0int.mjs'
+import { sendBina, shapeObj, toBinaOpError } from './classifyBinaErr.mjs'
+import { getBinaSpotClient } from './getBinaClient.mjs'
 
 
-let opBinaSpotLimit = async(st, ott, price, uTrade, rTakeProfit, rStopLoss, opt = {}) => {
+//現貨之自訂ID限制為^[a-zA-Z0-9-_]{1,36}$, tdid不含底線, 字尾_OTOCO另占6字元
+let REG_TDID_SPOT = /^[A-Za-z0-9-]{1,30}$/
 
-    // //forceTest
-    // let forceTest = get(opt, 'forceTest', null)
 
-    //params
-    let API_KEY = get(st, 'binance.apiSpot.key', '')
-    let API_SECRET = get(st, 'binance.apiSpot.secret', '')
-    let SYMBOL = get(st, 'symbol', '')
-    let digPrice = get(st, 'digPrice', '')
-    let digSpotQuantity = get(st, 'digSpotQuantity', '')
-    // console.log('API_KEY', API_KEY)
-    // console.log('API_SECRET', API_SECRET)
-    // console.log('SYMBOL', SYMBOL)
-    // console.log('digPrice', digPrice)
-    // console.log('digSpotQuantity', digSpotQuantity)
+/**
+ * 現貨限價買入並帶止盈止損(OTOCO)
+ *
+ * 僅第一階段: 依forTest選端點與金鑰(預設測試端點), 帶自訂ID, 錯誤帶execState; 現貨未實測, 未知回查與冪等規則屬第二階段, 不宣稱與合約同級
+ * 狀態未知時拋BinaOpError(err.outcome='OTOCO_FAILED', err.execState='unknown', err.state.listClientOrderId), 呼叫端以該ID自行查清, 不得盲目重送
+ *
+ * @param {Object} st 設定物件, 用binance.basePathSpot、basePathSpotTest、apiSpot、apiSpotTest
+ * @param {Function} ott 時間函數
+ * @param {String} tdid 交易識別字, ^[A-Za-z0-9-]{1,30}$, 實際ID為tdid_OTOCO
+ * @param {Number|String} price 限價(有效數字)
+ * @param {Number|String} uTrade 下單金額(有效數字), 不低於6
+ * @param {Number|String} rTakeProfit 止盈比例, 大於0小於0.25
+ * @param {Number|String} rStopLoss 止損比例, 大於0小於0.15
+ * @param {Object} [opt={}] forceTest
+ * @returns {Promise} resolve成功結果, reject BinaOpError
+ */
+let opBinaSpotLimit = async(st, ott, tdid, price, uTrade, rTakeProfit, rStopLoss, opt = {}) => {
 
     //check
-    if (!isnum(price)) {
-        throw new Error(`invalid price[${price}]`)
+    if (!isfun(ott)) {
+        throw new Error(`invalid ott: must be a function`)
+    }
+    if (typeof tdid !== 'string' || !REG_TDID_SPOT.test(tdid)) {
+        throw new Error(`invalid tdid: must be a string of 1 to 30 characters from A-Z a-z 0-9 -`)
+    }
+
+    //params
+    let digPrice = get(st, 'digPrice', '')
+    let digSpotQuantity = get(st, 'digSpotQuantity', '')
+    if (!isp0int(digPrice)) {
+        throw new Error(`invalid st.digPrice: must be a non-negative integer`)
+    }
+    if (!isp0int(digSpotQuantity)) {
+        throw new Error(`invalid st.digSpotQuantity: must be a non-negative integer`)
+    }
+
+    //check
+    if (!isenum(price) || cdbl(price) <= 0) {
+        throw new Error(`invalid price: must be a positive number`)
     }
     price = cdbl(price)
     price = dig(price, digPrice)
 
     //check uTrade
-    if (!isnum(uTrade)) {
-        throw new Error(`invalid uTrade[${uTrade}]`)
+    if (!isenum(uTrade) || cdbl(uTrade) < 6) {
+        throw new Error(`invalid uTrade: must be a number not less than 6`)
     }
     uTrade = cdbl(uTrade)
-    if (uTrade < 6) {
-        throw new Error(`uTrade[${uTrade}] < 6(u)`)
-    }
     uTrade = dig(uTrade, 2)
 
     //check rTakeProfit
-    if (!isnum(rTakeProfit)) {
-        throw new Error(`invalid rTakeProfit[${rTakeProfit}]`)
+    if (!isenum(rTakeProfit) || cdbl(rTakeProfit) <= 0 || cdbl(rTakeProfit) >= 0.25) {
+        throw new Error(`invalid rTakeProfit: must be a number greater than 0 and less than 0.25`)
     }
     rTakeProfit = cdbl(rTakeProfit)
-    if (rTakeProfit <= 0) {
-        throw new Error(`rTakeProfit[${rTakeProfit}] <= 0`)
-    }
-    if (rTakeProfit >= 0.25) {
-        throw new Error(`rTakeProfit[${rTakeProfit}] >= 0.25`)
-    }
 
     //check rStopLoss
-    if (!isnum(rStopLoss)) {
-        throw new Error(`invalid rStopLoss[${rStopLoss}]`)
+    if (!isenum(rStopLoss) || cdbl(rStopLoss) <= 0 || cdbl(rStopLoss) >= 0.15) {
+        throw new Error(`invalid rStopLoss: must be a number greater than 0 and less than 0.15`)
     }
     rStopLoss = cdbl(rStopLoss)
-    if (rStopLoss <= 0) {
-        throw new Error(`rStopLoss[${rStopLoss}] <= 0`)
-    }
-    if (rStopLoss >= 0.15) {
-        throw new Error(`rStopLoss[${rStopLoss}] >= 0.15`)
-    }
+
+    //client
+    let { client, SYMBOL, recvWindow } = getBinaSpotClient(st, opt)
 
     //priceTakeProfit
     let priceTakeProfit = (1 + rTakeProfit) * cdbl(price) //下單設定止盈價格(USDT)
@@ -74,13 +87,6 @@ let opBinaSpotLimit = async(st, ott, price, uTrade, rTakeProfit, rStopLoss, opt 
     priceStopLoss = dig(priceStopLoss, digPrice)
     // console.log('priceStopLoss', priceStopLoss)
 
-    //client
-    let configurationRestAPI = {
-        apiKey: API_KEY,
-        apiSecret: API_SECRET,
-    }
-    let client = new Spot({ configurationRestAPI })
-
     // let mode = 'long'
 
     //quantity, 須調整至最小購買數量
@@ -91,37 +97,43 @@ let opBinaSpotLimit = async(st, ott, price, uTrade, rTakeProfit, rStopLoss, opt 
     // console.log('quantity', quantity)
 
     //orderListOtoco
-    let rf = await client.restAPI.orderListOtoco({
+    let listClientOrderId = `${tdid}_OTOCO`
+    let res = null
+    try {
+        res = await sendBina(() => client.restAPI.orderListOtoco({
 
-        symbol: SYMBOL,
+            symbol: SYMBOL,
+            listClientOrderId,
+            recvWindow,
 
-        //工作單, 現貨限價買入
-        workingType: 'LIMIT',
-        workingSide: 'BUY',
-        workingPrice: price, //掛單買入價
-        workingQuantity: quantity,
-        workingTimeInForce: 'GTC',
+            //工作單, 現貨限價買入
+            workingType: 'LIMIT',
+            workingSide: 'BUY',
+            workingPrice: price, //掛單買入價
+            workingQuantity: quantity,
+            workingTimeInForce: 'GTC',
 
-        //出場單, 同一方向SELL, 數量要<=實際持倉
-        pendingSide: 'SELL',
-        pendingQuantity: quantity,
+            //出場單, 同一方向SELL, 數量要<=實際持倉
+            pendingSide: 'SELL',
+            pendingQuantity: quantity,
 
-        //止盈, 上方pendingAbove
-        pendingAboveType: 'TAKE_PROFIT_LIMIT',
-        pendingAbovePrice: priceTakeProfit, //限價
-        pendingAboveStopPrice: priceTakeProfit, //觸發價
-        pendingAboveTimeInForce: 'GTC', //有效直到取消
+            //止盈, 上方pendingAbove
+            pendingAboveType: 'TAKE_PROFIT_LIMIT',
+            pendingAbovePrice: priceTakeProfit, //限價
+            pendingAboveStopPrice: priceTakeProfit, //觸發價
+            pendingAboveTimeInForce: 'GTC', //有效直到取消
 
-        //止損, 下方pendingBelow
-        pendingBelowType: 'STOP_LOSS_LIMIT',
-        pendingBelowPrice: priceStopLoss, //限價
-        pendingBelowStopPrice: priceStopLoss, //觸發價
-        pendingBelowTimeInForce: 'GTC', //有效直到取消
+            //止損, 下方pendingBelow
+            pendingBelowType: 'STOP_LOSS_LIMIT',
+            pendingBelowPrice: priceStopLoss, //限價
+            pendingBelowStopPrice: priceStopLoss, //觸發價
+            pendingBelowTimeInForce: 'GTC', //有效直到取消
 
-    })
-
-    //res
-    let res = await rf.data()
+        }), (b) => shapeObj(b) && get(b, 'orderListId', null) !== null && b.listClientOrderId === listClientOrderId && Array.isArray(b.orders) && b.orders.length >= 3)
+    }
+    catch (err) {
+        throw toBinaOpError(err, { name: 'opBinaSpotLimit', outcome: 'OTOCO_FAILED', state: { tdid, listClientOrderId } })
+    }
     // console.log('res', res)
     // {
     //   orderListId: 17230397208,
@@ -208,23 +220,18 @@ let opBinaSpotLimit = async(st, ott, price, uTrade, rTakeProfit, rStopLoss, opt 
     //   ]
     // }
 
-    //check
-    if (res === null) {
-        console.log('rf', rf)
-        throw new Error(`invalid rf.data`)
-    }
-    if (haskey(res, 'code') && res.code !== 0) {
-        console.log('res', res)
-        let msg = get(res, 'msg', '')
-        throw new Error(msg)
-    }
-
     //id
     let id = get(res, 'orderListId', '')
 
     //time
-    let transactionTime = get(res, 'transactionTime', '')
-    let time = ott(transactionTime).format('YYYY-MM-DDTHH:mm:ss')
+    //此時單已成立, 呼叫端傳入之時間函數失敗不得讓結果遺失
+    let time = ''
+    try {
+        time = ott(get(res, 'transactionTime', '')).format('YYYY-MM-DDTHH:mm:ss')
+    }
+    catch (err) {
+        time = ''
+    }
 
     //symbol
     let symbol = get(res, 'symbol', '')

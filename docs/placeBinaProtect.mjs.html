@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    
+    <meta charset="utf-8">
+    <title>placeBinaProtect.mjs - Documentation</title>
+    
+    
+    <script src="scripts/prettify/prettify.js"></script>
+    <script src="scripts/prettify/lang-css.js"></script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc.css">
+    <script src="scripts/nav.js" defer></script>
+    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body>
+
+<input type="checkbox" id="nav-trigger" class="nav-trigger" />
+<label for="nav-trigger" class="navicon-button x">
+  <div class="navicon"></div>
+</label>
+
+<label for="nav-trigger" class="overlay"></label>
+
+<nav >
+    
+    
+    <h2><a href="index.html">Home</a></h2><h3>Global</h3><ul><li><a href="global.html#callBinaRead">callBinaRead</a></li><li><a href="global.html#cancelBinaAll">cancelBinaAll</a></li><li><a href="global.html#cancelBinaSingle">cancelBinaSingle</a></li><li><a href="global.html#classifyBinaErr">classifyBinaErr</a></li><li><a href="global.html#getBinaClient">getBinaClient</a></li><li><a href="global.html#getBinaSpotClient">getBinaSpotClient</a></li><li><a href="global.html#opBinaContractCancelAlgoOrder">opBinaContractCancelAlgoOrder</a></li><li><a href="global.html#opBinaContractCancelAllAlgoOrder">opBinaContractCancelAllAlgoOrder</a></li><li><a href="global.html#opBinaContractCancelAllOrder">opBinaContractCancelAllOrder</a></li><li><a href="global.html#opBinaContractCancelOrder">opBinaContractCancelOrder</a></li><li><a href="global.html#opBinaContractCancelResidualOrders">opBinaContractCancelResidualOrders</a></li><li><a href="global.html#opBinaContractListOrders">opBinaContractListOrders</a></li><li><a href="global.html#opBinaContractMarket">opBinaContractMarket</a></li><li><a href="global.html#opBinaContractMarketEntry">opBinaContractMarketEntry</a></li><li><a href="global.html#opBinaContractPlaceProtection">opBinaContractPlaceProtection</a></li><li><a href="global.html#opBinaContractQueryAccountInfor">opBinaContractQueryAccountInfor</a></li><li><a href="global.html#opBinaContractQueryOrderByClientId">opBinaContractQueryOrderByClientId</a></li><li><a href="global.html#opBinaContractQueryOrderInfo">opBinaContractQueryOrderInfo</a></li><li><a href="global.html#opBinaContractQueryPositionInfor">opBinaContractQueryPositionInfor</a></li><li><a href="global.html#opBinaContractQuerySymbolInfor">opBinaContractQuerySymbolInfor</a></li><li><a href="global.html#opBinaSpotLimit">opBinaSpotLimit</a></li><li><a href="global.html#opBinaSpotMarket">opBinaSpotMarket</a></li><li><a href="global.html#placeBinaProtect">placeBinaProtect</a></li><li><a href="global.html#reconcileBinaOrder">reconcileBinaOrder</a></li><li><a href="global.html#toBinaOpError">toBinaOpError</a></li></ul>
+    
+</nav>
+
+<div id="main">
+    
+    <h1 class="page-title">placeBinaProtect.mjs</h1>
+    
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>import find from 'lodash-es/find.js'
+import get from 'lodash-es/get.js'
+import cdbl from 'wsemi/src/cdbl.mjs'
+import cstr from 'wsemi/src/cstr.mjs'
+import delay from 'wsemi/src/delay.mjs'
+import getTrace from 'wsemi/src/getTrace.mjs'
+import { classifyBinaErr, sameQty, sendBina, shapeAlgo, shapeArr, shapeObj, shapePositions } from './classifyBinaErr.mjs'
+import { BINA_CLOCK_MARGIN_MS, BINA_RECV_WINDOW_MS } from './getBinaClient.mjs'
+import { getPosAmt } from './reconcileBinaOrder.mjs'
+
+
+let MAX_SENDS = 3
+
+
+//幣安帶單有下單速率限制20筆/10s, 每單至少500ms
+let GAP_MS = 600
+
+
+//SDK不帶Retry-After, 依序等待後重送
+let RATE_WAITS_MS = [1000, 2000]
+
+
+let LEG_BUDGET_MS = 20000
+
+
+//algo下單後queryAlgoOrder落後實測最大1274ms
+let QUERY_POLL_LIMIT_MS = 2000
+let QUERY_POLL_GAP_MS = 300
+
+
+//同ID查單回最新一筆, 早於本次送出者為前次之舊單, 其終局不能證明本次情形
+let IDENTITY_TIME_MARGIN_MS = 2000
+
+
+let STATUS_TRIGGERED = ['TRIGGERING', 'TRIGGERED', 'FINISHED']
+let STATUS_ENDED = ['CANCELED', 'EXPIRED', 'REJECTED']
+
+
+/**
+ * 掛一腳止損或止盈: 同clientAlgoId於開啟中為冪等故可重送, 但觸發成交後ID不再佔位, 故重送前須排除已觸發
+ *
+ * 觀察回調事件: protectSend{cid,n}, protectDone{cid,status,reason}
+ *
+ * @param {Object} p client, symbol, cid, side, positionSide, type, triggerPrice, quantity, recvWindow, minPos(本腳掛上時部位至少應有之量, 預設quantity), precheck(首送前也排除同ID已觸發, 補掛用), onTrace
+ * @returns {Promise} { status:'placed'|'notPlaced'|'unknown'|'triggered', algoId, clientAlgoId, reason, code, tSign, conclusiveAfter, res }
+ */
+let placeBinaProtect = async (p) => {
+
+    let { client, symbol, cid, side, positionSide, type, triggerPrice, quantity, recvWindow } = p
+    let minPos = cdbl(get(p, 'minPos', quantity))
+    let bPrecheck = get(p, 'precheck', false) === true
+    let trace = getTrace(p)
+
+    let t0 = performance.now()
+    let tFirstWall = Date.now()
+    let tSign = null
+    let lastCode = null
+
+    let done = (status, reason, res = null) => {
+        let r = {
+            status,
+            algoId: res &amp;&amp; get(res, 'algoId', null) !== null ? cstr(res.algoId) : null,
+            clientAlgoId: cid,
+            reason,
+            code: lastCode,
+            tSign,
+            conclusiveAfter: tSign === null ? null : tSign + BINA_RECV_WINDOW_MS + BINA_CLOCK_MARGIN_MS,
+            res,
+        }
+        if (trace) {
+            trace('protectDone', { cid, status, reason })
+        }
+        return r
+    }
+
+    let isSameOrder = (o) => {
+        return get(o, 'side', '') === side &amp;&amp;
+            get(o, 'positionSide', '') === positionSide &amp;&amp;
+            get(o, 'orderType', '') === type &amp;&amp;
+            sameQty(get(o, 'quantity', NaN), quantity) &amp;&amp;
+            sameQty(get(o, 'triggerPrice', NaN), triggerPrice)
+    }
+
+    //回 { ok, hit }, ok=false為查詢失敗
+    let readOpen = async () => {
+        try {
+            let open = await sendBina(() => client.restAPI.currentAllAlgoOpenOrders({ symbol, recvWindow }), shapeArr)
+            return { ok: true, hit: find(open, (o) => get(o, 'clientAlgoId', '') === cid) || null }
+        }
+        catch (err) {
+            return { ok: false, hit: null }
+        }
+    }
+
+    //本次之單或前次舊單; 無時間欄者判不了
+    let getAge = (ms) => {
+        let t = Number(ms)
+        if (!Number.isFinite(t) || t &lt;= 0) {
+            return 'unverified'
+        }
+        return t &lt; tFirstWall - IDENTITY_TIME_MARGIN_MS ? 'old' : 'current'
+    }
+
+    //未知後排除已觸發; 回終局或null(可重送)
+    let resolveUnknown = async () => {
+
+        //1) 開啟中; 查不到就排除不了原單存在或已觸發, 不重送
+        let open = await readOpen()
+        if (!open.ok) {
+            return done('unknown', 'openQueryFailed')
+        }
+        if (open.hit) {
+            return isSameOrder(open.hit) ? done('placed', null, open.hit) : done('notPlaced', 'conflict', open.hit)
+        }
+
+        //2) 單筆查詢
+        let tq = performance.now()
+        while (performance.now() - tq &lt; QUERY_POLL_LIMIT_MS) {
+            try {
+                let q = await sendBina(() => client.restAPI.queryAlgoOrder({ clientAlgoId: cid, recvWindow }), shapeObj)
+                let age = getAge(get(q, 'createTime', NaN))
+                if (age === 'unverified') {
+                    return done('unknown', 'identityUnverified', q)
+                }
+                if (age === 'current') {
+                    let status = get(q, 'algoStatus', '')
+                    if (STATUS_TRIGGERED.includes(status)) {
+                        return done('triggered', status, q)
+                    }
+                    if (STATUS_ENDED.includes(status)) {
+                        return done('notPlaced', `terminal:${status}`, q)
+                    }
+                    if (status === 'NEW') {
+                        let open2 = await readOpen()
+                        if (open2.hit) {
+                            return isSameOrder(open2.hit) ? done('placed', null, open2.hit) : done('notPlaced', 'conflict', open2.hit)
+                        }
+                        return done('unknown', 'newNotInOpen', q)
+                    }
+                    return done('unknown', 'unlistedStatus', q)
+                }
+                //前次舊單, 視同未觀察到本次之單
+            }
+            catch (err) {
+                //查無或失敗, 下單後有落後, 續查至上限再走下一步
+            }
+            await delay(QUERY_POLL_GAP_MS)
+        }
+
+        //3) 觸發單之clientOrderId等於clientAlgoId
+        try {
+            let o = await sendBina(() => client.restAPI.queryOrder({ symbol, origClientOrderId: cid, recvWindow }), shapeObj)
+            let age = getAge(get(o, 'time', NaN))
+            if (age === 'unverified') {
+                return done('unknown', 'identityUnverified', o)
+            }
+            if (age === 'current') {
+                return done('triggered', 'orderFound', o)
+            }
+        }
+        catch (err) {
+            if (classifyBinaErr(err).kind !== 'notObserved') {
+                return done('unknown', 'orderQueryFailed') //查不到就排除不了已觸發, 不重送
+            }
+        }
+
+        //4) 部位比應有者少或已反向, 代表可能已觸發. 以本腳平倉方向帶號比較
+        try {
+            let positions = await sendBina(() => client.restAPI.positionInformationV3({ symbol, recvWindow }), shapePositions)
+            let dirClose = side === 'SELL' ? 1 : -1
+            if (getPosAmt(positions, positionSide) * dirClose + 1e-9 &lt; minPos) {
+                return done('unknown', 'positionInsufficient')
+            }
+        }
+        catch (err) {
+            return done('unknown', 'positionUnread')
+        }
+
+        //5) 可同ID重送
+        return null
+    }
+
+    //補掛用: 同ID已觸發者ID不再佔位, 首送也會被接受而多一張, 故首送前也排除
+    if (bPrecheck) {
+        try {
+            let q = await sendBina(() => client.restAPI.queryAlgoOrder({ clientAlgoId: cid, recvWindow }), shapeObj)
+            if (STATUS_TRIGGERED.includes(get(q, 'algoStatus', ''))) {
+                return done('triggered', 'alreadyTriggered', q)
+            }
+        }
+        catch (err) {
+            if (classifyBinaErr(err).kind !== 'notObserved') {
+                return done('unknown', 'precheckFailed')
+            }
+            try {
+                let o = await sendBina(() => client.restAPI.queryOrder({ symbol, origClientOrderId: cid, recvWindow }), shapeObj)
+                return done('triggered', 'alreadyTriggered', o)
+            }
+            catch (err2) {
+                if (classifyBinaErr(err2).kind !== 'notObserved') {
+                    return done('unknown', 'precheckFailed')
+                }
+            }
+        }
+    }
+
+    //成功之回應須狀態與內容皆相符, 否則不算掛上
+    let shapePlaced = (b) => {
+        return shapeAlgo(cid)(b) &amp;&amp; get(b, 'algoStatus', '') === 'NEW' &amp;&amp; isSameOrder(b)
+    }
+
+    let sawUnknown = false
+    let nRate = 0
+    let gapNext = GAP_MS
+    let lastRejectReason = null
+    tFirstWall = Date.now()
+    for (let n = 1; n &lt;= MAX_SENDS; n++) {
+
+        if (n > 1) {
+            await delay(gapNext)
+            gapNext = GAP_MS
+        }
+        if (performance.now() - t0 > LEG_BUDGET_MS) {
+            return done(sawUnknown ? 'unknown' : 'notPlaced', 'budgetExceeded')
+        }
+
+        tSign = Date.now()
+        if (trace) {
+            trace('protectSend', { cid, n })
+        }
+
+        try {
+            let res = await sendBina(() => client.restAPI.newAlgoOrder({
+                algoType: 'CONDITIONAL',
+                symbol,
+                side,
+                positionSide,
+                type,
+                triggerPrice,
+                quantity,
+                // reduceOnly: true, //dualSidePosition=true不能給reduceOnly=true
+                workingType: 'MARK_PRICE',
+                clientAlgoId: cid,
+                recvWindow,
+            }), shapePlaced)
+            return done('placed', null, res)
+        }
+        catch (err) {
+
+            let info = classifyBinaErr(err)
+            lastCode = info.code
+
+            if (info.kind === 'duplicate') {
+                let open = await readOpen()
+                if (open.hit) {
+                    return isSameOrder(open.hit) ? done('placed', null, open.hit) : done('notPlaced', 'conflict', open.hit)
+                }
+                //ID佔位而不在開啟中, 當未知
+            }
+            else if (info.httpStatus === 418) {
+                //不再送
+                if (!sawUnknown &amp;&amp; info.execState === 'notExecuted') {
+                    return done('notPlaced', 'rateLimitBan')
+                }
+                let open = await readOpen()
+                if (open.hit &amp;&amp; isSameOrder(open.hit)) {
+                    return done('placed', null, open.hit)
+                }
+                return done('unknown', 'rateLimitBan')
+            }
+            else if (info.execState === 'notExecuted' &amp;&amp; info.kind === 'rateLimited') {
+                lastRejectReason = 'rateLimited'
+                gapNext = RATE_WAITS_MS[Math.min(nRate, RATE_WAITS_MS.length - 1)]
+                nRate++
+                continue
+            }
+            else if (info.execState === 'notExecuted') {
+                let reason = info.code === -2021 ? 'immediateTrigger' : 'rejected'
+                if (!sawUnknown) {
+                    return done('notPlaced', reason)
+                }
+                //先未知後確定不可覆蓋
+                let open = await readOpen()
+                if (open.hit &amp;&amp; isSameOrder(open.hit)) {
+                    return done('placed', null, open.hit)
+                }
+                return done('unknown', reason)
+            }
+
+            sawUnknown = true
+            let r = await resolveUnknown()
+            if (r) {
+                return r
+            }
+
+        }
+
+    }
+
+    if (!sawUnknown &amp;&amp; lastRejectReason) {
+        return done('notPlaced', lastRejectReason)
+    }
+    return done('unknown', 'sendsExhausted')
+}
+
+
+//兩腳結果對應outcome: 全程皆成回null
+let getProtectOutcome = (sl, tp) => {
+    let sSl = get(sl, 'status', '')
+    let sTp = get(tp, 'status', '')
+    if (sSl === 'triggered' || sTp === 'triggered') {
+        return 'ENTERED_POSITION_CHANGED'
+    }
+    if (sSl === 'placed' &amp;&amp; sTp === 'placed') {
+        return null
+    }
+    if (sSl === 'placed') {
+        return 'ENTERED_SL_ONLY'
+    }
+    if (sSl === 'notPlaced' &amp;&amp; sTp === 'placed') {
+        return 'ENTERED_TP_ONLY'
+    }
+    if (sSl === 'notPlaced' &amp;&amp; sTp === 'notPlaced') {
+        return 'ENTERED_UNPROTECTED'
+    }
+    return 'ENTERED_PROTECTION_UNKNOWN'
+}
+
+
+export { getProtectOutcome, GAP_MS }
+export default placeBinaProtect
+</code></pre>
+        </article>
+    </section>
+
+
+
+
+    
+    
+</div>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 4.0.5</a> on Tue Nov 03 2026 21:42:36 GMT+0800 (台北標準時間) using the <a href="https://github.com/clenemt/docdash">docdash</a> theme.
+</footer>
+
+<script>prettyPrint();</script>
+<script src="scripts/polyfill.js"></script>
+<script src="scripts/linenumber.js"></script>
+
+
+
+</body>
+</html>

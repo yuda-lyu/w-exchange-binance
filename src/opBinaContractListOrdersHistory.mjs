@@ -4,63 +4,57 @@ import size from 'lodash-es/size.js'
 import sortBy from 'lodash-es/sortBy.js'
 import cdbl from 'wsemi/src/cdbl.mjs'
 import cstr from 'wsemi/src/cstr.mjs'
-import isbol from 'wsemi/src/isbol.mjs'
-import sep from 'wsemi/src/sep.mjs'
-import { DerivativesTradingUsdsFutures } from '@binance/derivatives-trading-usds-futures'
+import isfun from 'wsemi/src/isfun.mjs'
+import callBinaRead from './callBinaRead.mjs'
+import { BinaOpError, shapeArr } from './classifyBinaErr.mjs'
+import getBinaClient from './getBinaClient.mjs'
+
+
+//依字尾解析: tdid可能含底線者, 以第一個底線切分會解析錯
+let parseClientId = (clientOrderId) => {
+    let m = /^(.+)_(ENTRY|TP|SL)$/.exec(clientOrderId)
+    if (m) {
+        return { tdid: m[1], kind: m[2] }
+    }
+    return { tdid: '', kind: '' }
+}
 
 
 //查詢指定起訖時間內的訂單層級歷史(allOrders普通單 + queryAllAlgoOrders algo單)
 //Binance限制: 單次最多1000筆, 時間窗最長7天 → 自動切7天窗 + 窗內以時間續抓拉完整段
-//輸入: timeStart/timeEnd ('YYYY-MM-DDTHH:mm:ss'), opt預留
+//輸入: timeStart/timeEnd ('YYYY-MM-DDTHH:mm:ss'), opt: forceTest, onTrace
 //輸出: 正規化訂單陣列, 依time升序
 //  [{ orderId, clientOrderId, tdid, kind, isAlgo, status, type, side, positionSide,
 //     avgPrice, executedQty, origQty, time, timeStr, updateTime }]
 //  普通單(entry)的clientOrderId為 tdid-XXX_ENTRY; algo單(TP/SL)的clientAlgoId為 tdid-XXX_TP / _SL
 //  與accountTradeList以orderId對應(普通單orderId / algo單algoId)
+//  讀取失敗拋BinaOpError(err.execState、err.binance.attempts)
 let opBinaContractListOrdersHistory = async(st, ott, timeStart, timeEnd, opt = {}) => {
 
-    //forceTest
-    let forceTest = get(opt, 'forceTest', null)
-
-    //params
-    let forTestAll = get(st, 'forTestAll', null)
-    let forTest = get(st, 'binance.forTest', null)
-    if (isbol(forceTest)) {
-        forTest = forceTest
+    //check
+    if (!isfun(ott)) {
+        throw new Error(`invalid ott: must be a function`)
     }
-    else if (isbol(forTestAll)) {
-        forTest = forTestAll
-    }
-    else if (!isbol(forTest)) {
-        forTest = true
-    }
-    let keyApiContract = 'apiContract'
-    if (forTest) {
-        keyApiContract = 'apiContractTest'
-    }
-    //basePath 由 settings 決定: forTest=true 用 binance.basePathTest (測試端點); forTest=false 用 binance.basePath (正式端點)
-    let basePath = forTest ? get(st, 'binance.basePathTest', '') : get(st, 'binance.basePath', '')
-    let API_KEY = get(st, `binance.${keyApiContract}.key`, '')
-    let API_SECRET = get(st, `binance.${keyApiContract}.secret`, '')
-    let SYMBOL = get(st, 'symbol', '')
 
     //client
-    let configurationRestAPI = { apiKey: API_KEY, apiSecret: API_SECRET, basePath }
-    let client = new DerivativesTradingUsdsFutures({ configurationRestAPI })
+    let { client, SYMBOL, recvWindow } = getBinaClient(st, opt)
+    let onTrace = get(opt, 'onTrace', null)
 
     //ms範圍
     let msStart = ott(timeStart).valueOf()
     let msEnd = ott(timeEnd).valueOf()
     if (!(msStart < msEnd)) {
-        throw new Error(`timeStart[${timeStart}] 須早於 timeEnd[${timeEnd}]`)
+        throw new Error(`invalid timeStart: must be earlier than timeEnd`)
     }
 
     let WIN = 7 * 24 * 60 * 60 * 1000 //7天(Binance時間窗上限)
     let LIMIT = 1000
 
-    //通用: 逐7天窗 + 窗內續抓, fnFetch(curStart, winEnd) -> arr, fnTime(o) -> ms
-    let fetchAllByWindow = async(fnFetch, fnTime) => {
+    //通用: 逐7天窗 + 窗內續抓, fnFetch(curStart, winEnd) -> arr, fnTime(o) -> ms, fnKey(o) -> 去重鍵
+    //滿頁且同毫秒尚有資料時以time+1續抓會漏筆, 故由最後一筆time重疊續抓並以ID去重; 滿頁仍無新資料者無法再推進, 拋錯不得靜默漏筆
+    let fetchAllByWindow = async(fnFetch, fnTime, fnKey) => {
         let all = []
+        let seenKey = new Set()
         let winStart = msStart
         while (winStart < msEnd) {
             let winEnd = Math.min(winStart + WIN, msEnd)
@@ -71,15 +65,23 @@ let opBinaContractListOrdersHistory = async(st, ott, timeStart, timeEnd, opt = {
                 if (size(arr) === 0) {
                     break
                 }
-                all.push(...arr)
+                let nNew = 0
+                for (let o of arr) {
+                    let key = fnKey(o)
+                    if (!seenKey.has(key)) {
+                        seenKey.add(key)
+                        all.push(o)
+                        nNew++
+                    }
+                }
                 if (size(arr) < LIMIT) {
                     break
                 }
                 let lastTime = Number(fnTime(last(arr)))
-                if (!lastTime || lastTime < curStart) {
-                    break //防呆
+                if (nNew === 0 || !lastTime || lastTime < curStart) {
+                    throw new BinaOpError(`opBinaContractListOrdersHistory failed: pagination stuck`, { execState: 'unknown', outcome: 'PAGINATION_STUCK' })
                 }
-                curStart = lastTime + 1
+                curStart = lastTime
             }
 
             winStart = winEnd
@@ -93,27 +95,25 @@ let opBinaContractListOrdersHistory = async(st, ott, timeStart, timeEnd, opt = {
     //普通單(entry)
     let rawNormal = await fetchAllByWindow(
         async(curStart, winEnd) => {
-            let op = await client.restAPI.allOrders({ symbol: SYMBOL, startTime: curStart, endTime: winEnd, limit: LIMIT })
-            return await op.data()
+            return callBinaRead(() => client.restAPI.allOrders({ symbol: SYMBOL, startTime: curStart, endTime: winEnd, limit: LIMIT, recvWindow }), { name: 'allOrders', shape: shapeArr, onTrace })
         },
         (o) => get(o, 'time', 0),
+        (o) => cstr(get(o, 'orderId', '')),
     )
 
     //algo單(TP/SL). 注意algo單欄位名與普通單不同: algoId/clientAlgoId/algoStatus/orderType/createTime/actualPrice/quantity
     let rawAlgo = await fetchAllByWindow(
         async(curStart, winEnd) => {
-            let op = await client.restAPI.queryAllAlgoOrders({ symbol: SYMBOL, startTime: curStart, endTime: winEnd, limit: LIMIT })
-            return await op.data()
+            return callBinaRead(() => client.restAPI.queryAllAlgoOrders({ symbol: SYMBOL, startTime: curStart, endTime: winEnd, limit: LIMIT, recvWindow }), { name: 'allAlgoOrders', shape: shapeArr, onTrace })
         },
         (o) => get(o, 'createTime', 0),
+        (o) => cstr(get(o, 'algoId', '')),
     )
 
     //正規化單筆 (普通單與algo單欄位名不同, 統一成同一份schema)
     let norm = (o, isAlgo) => {
         let clientOrderId = isAlgo ? get(o, 'clientAlgoId', '') : get(o, 'clientOrderId', '')
-        let ss = sep(clientOrderId, '_')
-        let tdid = get(ss, 0, '')
-        let kind = get(ss, 1, '') //ENTRY / TP / SL
+        let { tdid, kind } = parseClientId(clientOrderId) //kind: ENTRY / TP / SL
         let timeMs = Number(isAlgo ? get(o, 'createTime', 0) : get(o, 'time', 0))
         let updMs = Number(get(o, 'updateTime', 0))
         return {
@@ -128,7 +128,7 @@ let opBinaContractListOrdersHistory = async(st, ott, timeStart, timeEnd, opt = {
             side: get(o, 'side', ''),
             positionSide: get(o, 'positionSide', ''),
             avgPrice: cdbl(isAlgo ? get(o, 'actualPrice', 0) : get(o, 'avgPrice', 0)),
-            executedQty: cdbl(get(o, 'executedQty', 0)),
+            executedQty: cdbl(isAlgo ? get(o, 'actualQty', 0) : get(o, 'executedQty', 0)), //allAlgoOrders無executedQty, 成交量在actualQty
             origQty: cdbl(isAlgo ? get(o, 'quantity', 0) : get(o, 'origQty', 0)),
             triggerPrice: cdbl(isAlgo ? get(o, 'triggerPrice', 0) : get(o, 'stopPrice', 0)),
             time: timeMs,

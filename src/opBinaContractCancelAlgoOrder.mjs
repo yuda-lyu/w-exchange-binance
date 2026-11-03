@@ -1,56 +1,31 @@
 import get from 'lodash-es/get.js'
-import isbol from 'wsemi/src/isbol.mjs'
-import isestr from 'wsemi/src/isestr.mjs'
-import { DerivativesTradingUsdsFutures } from '@binance/derivatives-trading-usds-futures'
+import cancelBinaSingle, { parseCancelTarget } from './cancelBinaSingle.mjs'
+import getBinaClient from './getBinaClient.mjs'
 
 
+/**
+ * 取消algo單(止損止盈): 目標是這張單不再開啟, 已不開啟不是錯誤, 但要告知實際終局
+ *
+ * 回傳state: CANCELED, FINISHED, EXPIRED, REJECTED, TRIGGERING, TRIGGERED, NOT_FOUND. 判不了或未查清時拋BinaOpError(err.execState='unknown'), 呼叫端不可視為已撤
+ * alreadyClosed只在查得終局時為true; NOT_FOUND不設(剛掛之algo有查詢落後); positionChanged為true時部位已變或正在變動, 呼叫端須查部位
+ *
+ * 觀察回調事件: cancelSend{id,n}, cancelDone{id,state}
+ *
+ * @param {Object} st 設定物件
+ * @param {String|Number|Object} algoId 交易所ID(數字字串或安全整數), 或{ algoId }、{ clientAlgoId }
+ * @param {Object} [opt={}] forceTest, onTrace
+ * @returns {Promise} resolve { state, alreadyClosed, positionChanged, executedQty, res }, reject BinaOpError
+ */
 let opBinaContractCancelAlgoOrder = async(st, algoId, opt = {}) => {
 
     //check
-    if (!isestr(algoId) && !Number.isInteger(algoId)) {
-        throw new Error(`algoId[${algoId}] is invalid`)
-    }
-
-    //params
-    let forceTest = get(opt, 'forceTest', null)
-    let forTestAll = get(st, 'forTestAll', null)
-    let forTest = get(st, 'binance.forTest', null)
-    if (isbol(forceTest)) {
-        forTest = forceTest
-    }
-    else if (isbol(forTestAll)) {
-        forTest = forTestAll
-    }
-    else if (!isbol(forTest)) {
-        forTest = true
-    }
-    let keyApiContract = 'apiContract'
-    if (forTest) {
-        keyApiContract = 'apiContractTest'
-    }
-    //basePath 由 settings 決定: forTest=true 用 binance.basePathTest (測試端點); forTest=false 用 binance.basePath (正式端點)
-    let basePath = forTest ? get(st, 'binance.basePathTest', '') : get(st, 'binance.basePath', '')
-    let API_KEY = get(st, `binance.${keyApiContract}.key`, '')
-    let API_SECRET = get(st, `binance.${keyApiContract}.secret`, '')
-    // console.log('API_KEY', API_KEY)
-    // console.log('API_SECRET', API_SECRET)
+    let target = parseCancelTarget(algoId, true)
 
     //client
-    let configurationRestAPI = {
-        apiKey: API_KEY,
-        apiSecret: API_SECRET,
-        basePath,
-    }
-    let client = new DerivativesTradingUsdsFutures({ configurationRestAPI })
+    let { client, SYMBOL, recvWindow } = getBinaClient(st, opt)
 
-    //clod
-    //v22起欄位名為algoId(camelCase, 之前v19~v21是algoid全小寫)
-    let clodr = await client.restAPI.cancelAlgoOrder({
-        algoId: isestr(algoId) ? algoId : Number(algoId),
-    })
-    let clod = await clodr.data()
-
-    return clod
+    //cancel
+    return cancelBinaSingle({ client, symbol: SYMBOL, isAlgo: true, target, recvWindow, onTrace: get(opt, 'onTrace', null) })
 }
 
 

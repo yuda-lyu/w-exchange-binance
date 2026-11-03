@@ -1,324 +1,310 @@
-import each from 'lodash-es/each.js'
 import filter from 'lodash-es/filter.js'
 import get from 'lodash-es/get.js'
 import groupBy from 'lodash-es/groupBy.js'
 import map from 'lodash-es/map.js'
 import size from 'lodash-es/size.js'
-import isestr from 'wsemi/src/isestr.mjs'
+import cdbl from 'wsemi/src/cdbl.mjs'
+import cstr from 'wsemi/src/cstr.mjs'
+import delay from 'wsemi/src/delay.mjs'
+import getTrace from 'wsemi/src/getTrace.mjs'
 import pmSeries from 'wsemi/src/pmSeries.mjs'
-import sep from 'wsemi/src/sep.mjs'
-import opBinaContractListOrders from './opBinaContractListOrders.mjs'
-import opBinaContractCancelOrder from './opBinaContractCancelOrder.mjs'
+import { BinaOpError, toBinanceInfo, classifyBinaErr } from './classifyBinaErr.mjs'
+import getBinaClient from './getBinaClient.mjs'
 import opBinaContractCancelAlgoOrder from './opBinaContractCancelAlgoOrder.mjs'
+import opBinaContractCancelOrder from './opBinaContractCancelOrder.mjs'
+import opBinaContractListOrders from './opBinaContractListOrders.mjs'
+import opBinaContractQueryPositionInfor from './opBinaContractQueryPositionInfor.mjs'
+import { readBinaAlgo, readBinaOrder } from './readBinaLeg.mjs'
+import { getPosAmt } from './reconcileBinaOrder.mjs'
 
 
+//進行中之進場, 部位讀取可能落後
+let LEG_MIN_AGE_MS = 10000
+
+
+//部位為0時再讀一次之間隔, 讀到舊0會撤真實止損
+let POS_REREAD_MS = 1000
+
+
+//依字尾解析, 不以第一個底線切分
+let parseLeg = (clientOrderId) => {
+    let m = /^(.+)_(SL|TP)$/.exec(String(clientOrderId))
+    if (m) {
+        return { tdid: m[1], kind: m[2] }
+    }
+    return { tdid: '', kind: '' }
+}
+
+
+let getLegQty = (o) => {
+    return cdbl(o.isAlgo ? get(o, 'quantity', 0) : get(o, 'origQty', 0))
+}
+
+
+//腿之方向與類型須與字尾、positionSide相符: LONG之保護為SELL、SHORT為BUY, SL為STOP類、TP為TAKE_PROFIT類
+let isLegConsistent = (o) => {
+    let type = String(get(o, 'type', ''))
+    let bType = o.kind === 'SL' ? type.startsWith('STOP') : type.startsWith('TAKE_PROFIT')
+    let positionSide = get(o, 'positionSide', '')
+    let side = get(o, 'side', '')
+    let bSide = positionSide === 'LONG' ? side === 'SELL' : (positionSide === 'SHORT' ? side === 'BUY' : true)
+    return bType && bSide && getLegQty(o) > 0
+}
+
+
+let getLegTime = (o) => {
+    return Number(o.isAlgo ? get(o, 'createTime', NaN) : get(o, 'time', NaN))
+}
+
+
+/**
+ * 清殘單: 依部位符號、腿量、腿齡與對腳判定, 判不了不撤且回報, 不吞錯
+ *
+ * 判定(同tdid為一組): 腿齡未滿10秒skipped:tooNew; 部位連讀兩次皆0全撤(含兩腳俱在); 兩次不同skipped:positionChanging; 部位反向skipped:reversedPosition; 超過2筆、非一SL一TP或腿之方向類型與字尾不符skipped:anomalous; 該kind腿量合計大於部位skipped:oversized; 一SL一TP不動; 單腳且對腳FINISHED而actualQty足量才撤, 不足、查無、查詢失敗skipped:partnerUnconfirmed, 其他狀態skipped:partnerStatus
+ *
+ * 呼叫端須定期呼叫本操作: 部位正常而判不了之單會留著, 兩輪之間部位已歸0而留著之單仍可能觸發並反向, 間隔越短窗越小; 先列單後查部位仍非原子快照, 腿齡與重讀只降低、不消除競態
+ *
+ * 查部位失敗整批不撤, 拋BinaOpError(err.execState='unknown'); 撤單失敗不拋, 列於failed
+ *
+ * 觀察回調事件: residualDecision{tdid,decision,reason}, 另見callBinaRead、cancelBinaSingle
+ *
+ * @param {Object} st 設定物件
+ * @param {Object} [opt={}] forceTest, onTrace; 全部下傳
+ * @returns {Promise} resolve { cancelled:[{o,state,res}], closedOtherwise:[{o,state,res}], skipped:[{o,reason}], failed:[{o,execState,code}], unprotected:[{positionSide,amt}], underProtected:[{positionSide,kind,legQty,amt}] }; 後兩者依撤單後之剩餘腿計算
+ */
 let opBinaContractCancelResidualOrders = async(st, opt = {}) => {
 
-    //orders
-    let orders = await opBinaContractListOrders(st)
-    // console.log('orders', orders)
+    let trace = getTrace(opt)
+    let onTrace = get(opt, 'onTrace', null)
+    let { client, SYMBOL, recvWindow } = getBinaClient(st, opt)
 
-    //check
-    if (size(orders) === 0) {
-        return []
+    let r = { cancelled: [], closedOtherwise: [], skipped: [], failed: [], unprotected: [], underProtected: [] }
+
+    let decide = (tdid, decision, reason) => {
+        if (trace) {
+            trace('residualDecision', { tdid, decision, reason })
+        }
     }
 
-    //add tdid, kind
-    orders = map(orders, (o) => {
+    //列單 → 查部位; 查部位失敗整批不撤
+    let orders = await opBinaContractListOrders(st, opt)
 
-        //clientOrderId
-        let clientOrderId = get(o, 'clientOrderId', '')
-
-        //tdid, kind
-        let ss = sep(clientOrderId, '_')
-        let tdid = get(ss, 0, '')
-        let kind = get(ss, 1, '') //TP, SL
-
-        //add
-        o.tdid = tdid
-        o.kind = kind
-
-        return o
-    })
-    // console.log('orders(add tdid, kind)', orders)
-    // orders(add tdid, kind) [
-    //   {
-    //     orderId: 7605276920,
-    //     symbol: 'ETHUSDT',
-    //     status: 'NEW',
-    //     clientOrderId: 'tdid-20251206194325-Zqaa49_SL',
-    //     price: '0',
-    //     avgPrice: '0',
-    //     origQty: '0.007',
-    //     executedQty: '0',
-    //     cumQuote: '0.00000',
-    //     timeInForce: 'GTC',
-    //     type: 'STOP_MARKET',
-    //     reduceOnly: true,
-    //     closePosition: false,
-    //     side: 'SELL',
-    //     positionSide: 'BOTH',
-    //     stopPrice: '3030.65',
-    //     workingType: 'MARK_PRICE',
-    //     priceProtect: false,
-    //     origType: 'STOP_MARKET',
-    //     priceMatch: 'NONE',
-    //     selfTradePreventionMode: 'EXPIRE_MAKER',
-    //     goodTillDate: 0,
-    //     time: 1765021407346,
-    //     updateTime: 1765021407346,
-    //     tdid: 'tdid-20251206194325-Zqaa49',
-    //     kind: 'SL'
-    //   },
-    //   {
-    //     orderId: 7605276918,
-    //     symbol: 'ETHUSDT',
-    //     status: 'NEW',
-    //     clientOrderId: 'tdid-20251206194325-Zqaa49_TP',
-    //     price: '0',
-    //     avgPrice: '0',
-    //     origQty: '0.007',
-    //     executedQty: '0',
-    //     cumQuote: '0.00000',
-    //     timeInForce: 'GTC',
-    //     type: 'TAKE_PROFIT_MARKET',
-    //     reduceOnly: true,
-    //     closePosition: false,
-    //     side: 'SELL',
-    //     positionSide: 'BOTH',
-    //     stopPrice: '3048.87',
-    //     workingType: 'MARK_PRICE',
-    //     priceProtect: false,
-    //     origType: 'TAKE_PROFIT_MARKET',
-    //     priceMatch: 'NONE',
-    //     selfTradePreventionMode: 'EXPIRE_MAKER',
-    //     goodTillDate: 0,
-    //     time: 1765021407201,
-    //     updateTime: 1765021407201,
-    //     tdid: 'tdid-20251206194325-Zqaa49',
-    //     kind: 'TP'
-    //   }
-    // ]
-
-    //filter orders
-    orders = filter(orders, (o) => {
-
-        //b1
-        let b1 = isestr(o.tdid)
-
-        //b2
-        let b2 = o.kind === 'TP' || o.kind === 'SL'
-
-        //b
-        let b = b1 && b2
-
-        return b
-    })
-    // console.log('orders(filter kind)', orders)
-
-    //gs
-    let gs = groupBy(orders, 'tdid')
-    // console.log('gs', gs)
-    // gs {
-    //   'tdid-20251206194325-Zqaa49': [
-    //     {
-    //       orderId: 7605276920,
-    //       symbol: 'ETHUSDT',
-    //       status: 'NEW',
-    //       clientOrderId: 'tdid-20251206194325-Zqaa49_SL',
-    //       price: '0',
-    //       avgPrice: '0',
-    //       origQty: '0.007',
-    //       executedQty: '0',
-    //       cumQuote: '0.00000',
-    //       timeInForce: 'GTC',
-    //       type: 'STOP_MARKET',
-    //       reduceOnly: true,
-    //       closePosition: false,
-    //       side: 'SELL',
-    //       positionSide: 'BOTH',
-    //       stopPrice: '3030.65',
-    //       workingType: 'MARK_PRICE',
-    //       priceProtect: false,
-    //       origType: 'STOP_MARKET',
-    //       priceMatch: 'NONE',
-    //       selfTradePreventionMode: 'EXPIRE_MAKER',
-    //       goodTillDate: 0,
-    //       time: 1765021407346,
-    //       updateTime: 1765021407346,
-    //       tdid: 'tdid-20251206194325-Zqaa49',
-    //       kind: 'SL'
-    //     },
-    //     {
-    //       orderId: 7605276918,
-    //       symbol: 'ETHUSDT',
-    //       status: 'NEW',
-    //       clientOrderId: 'tdid-20251206194325-Zqaa49_TP',
-    //       price: '0',
-    //       avgPrice: '0',
-    //       origQty: '0.007',
-    //       executedQty: '0',
-    //       cumQuote: '0.00000',
-    //       timeInForce: 'GTC',
-    //       type: 'TAKE_PROFIT_MARKET',
-    //       reduceOnly: true,
-    //       closePosition: false,
-    //       side: 'SELL',
-    //       positionSide: 'BOTH',
-    //       stopPrice: '3048.87',
-    //       workingType: 'MARK_PRICE',
-    //       priceProtect: false,
-    //       origType: 'TAKE_PROFIT_MARKET',
-    //       priceMatch: 'NONE',
-    //       selfTradePreventionMode: 'EXPIRE_MAKER',
-    //       goodTillDate: 0,
-    //       time: 1765021407201,
-    //       updateTime: 1765021407201,
-    //       tdid: 'tdid-20251206194325-Zqaa49',
-    //       kind: 'TP'
-    //     }
-    //   ]
-    // }
-
-    //ordersCancel
-    let ordersCancel = []
-    each(gs, (os, tdid) => {
-
-        //n
-        let n = size(os)
-
-        //check
-        if (n === 2) {
-            return true //跳出換下一個
+    let readPositions = async () => {
+        try {
+            return await opBinaContractQueryPositionInfor(st, opt)
         }
-        if (n > 2) {
-            throw new Error(`n[${n}] orders for tdid[${tdid}] > 2`)
+        catch (err) {
+            throw new BinaOpError(`opBinaContractCancelResidualOrders failed: position query failed`, {
+                execState: 'unknown',
+                outcome: 'POSITION_UNREAD',
+                binance: err.binance || toBinanceInfo(classifyBinaErr(err)),
+                cause: err,
+            })
         }
-
-        //o, n=1
-        let o = os[0]
-
-        //push
-        ordersCancel.push(o)
-
-    })
-    // console.log('ordersCancel', ordersCancel)
-    // ordersCancel [
-    //   {
-    //     orderId: 7605276918,
-    //     symbol: 'ETHUSDT',
-    //     status: 'NEW',
-    //     clientOrderId: 'tdid-20251206194325-Zqaa49_TP',
-    //     price: '0',
-    //     avgPrice: '0',
-    //     origQty: '0.007',
-    //     executedQty: '0',
-    //     cumQuote: '0.00000',
-    //     timeInForce: 'GTC',
-    //     type: 'TAKE_PROFIT_MARKET',
-    //     reduceOnly: true,
-    //     closePosition: false,
-    //     side: 'SELL',
-    //     positionSide: 'BOTH',
-    //     stopPrice: '3048.87',
-    //     workingType: 'MARK_PRICE',
-    //     priceProtect: false,
-    //     origType: 'TAKE_PROFIT_MARKET',
-    //     priceMatch: 'NONE',
-    //     selfTradePreventionMode: 'EXPIRE_MAKER',
-    //     goodTillDate: 0,
-    //     time: 1765021407201,
-    //     updateTime: 1765021407201,
-    //     tdid: 'tdid-20251206194325-Zqaa49',
-    //     kind: 'TP'
-    //   }
-    // ]
-
-    //check
-    if (size(ordersCancel) === 0) {
-        return []
     }
+    let positions = await readPositions()
 
-    //ress
-    let ress = []
-    await pmSeries(ordersCancel, async(o) => {
+    //legs
+    let legs = map(orders, (o) => {
+        return { ...o, ...parseLeg(get(o, 'clientOrderId', '')) }
+    })
+    legs = filter(legs, (o) => {
+        return o.tdid !== ''
+    })
 
-        //isAlgo, algo單與普通單需呼叫不同的cancel API
-        let isAlgo = get(o, 'isAlgo', false)
+    //group
+    let gs = groupBy(legs, 'tdid')
+    let now = Date.now()
+    let groups = map(gs, (os, tdid) => {
+        return { tdid, os, positionSide: get(os, '0.positionSide', '') }
+    })
 
-        //res
-        let res = null
-        if (isAlgo) {
-
-            //algoId
-            let algoId = get(o, 'algoId', '')
-
-            await opBinaContractCancelAlgoOrder(st, algoId)
-                .then((_res) => {
-                    res = _res
-                    // console.log('res', res)
-                })
-                .catch((err) => {
-                    //不能報錯中斷, 須避免影響到後面也須取消下單
-                    console.log(err)
-                })
-
+    //腿齡未滿者不判定
+    let groupsAged = []
+    for (let g of groups) {
+        let bNew = false
+        for (let o of g.os) {
+            let t = getLegTime(o)
+            if (!Number.isFinite(t) || now - t < LEG_MIN_AGE_MS) {
+                bNew = true
+            }
+        }
+        if (bNew) {
+            decide(g.tdid, 'skip', 'tooNew')
+            for (let o of g.os) {
+                r.skipped.push({ o, reason: 'tooNew' })
+            }
         }
         else {
+            groupsAged.push(g)
+        }
+    }
 
-            //orderId
-            let orderId = get(o, 'orderId', '')
+    //部位為0者再讀一次, 兩次皆0才全撤
+    let bAnyFlat = false
+    for (let g of groupsAged) {
+        if (getPosAmt(positions, g.positionSide) === 0) {
+            bAnyFlat = true
+        }
+    }
+    let positions2 = positions
+    if (bAnyFlat) {
+        await delay(POS_REREAD_MS)
+        positions2 = await readPositions()
+    }
 
-            await opBinaContractCancelOrder(st, orderId)
-                .then((_res) => {
-                    res = _res
-                    // console.log('res', res)
-                })
-                .catch((err) => {
-                    //不能報錯中斷, 須避免影響到後面也須取消下單
-                    console.log(err)
-                })
+    let ordersCancel = []
 
+    //該kind腿量合計, 多tdid共用部位時會超量, 判不了歸屬
+    let getKindSum = (positionSide, kind) => {
+        let s = 0
+        for (let o of legs) {
+            if (o.positionSide === positionSide && o.kind === kind) {
+                s += getLegQty(o)
+            }
+        }
+        return s
+    }
+
+    let skipGroup = (g, reason) => {
+        decide(g.tdid, 'skip', reason)
+        for (let o of g.os) {
+            r.skipped.push({ o, reason })
+        }
+    }
+
+    for (let g of groupsAged) {
+
+        let { tdid, os, positionSide } = g
+        let amt = getPosAmt(positions, positionSide)
+        let amt2 = getPosAmt(positions2, positionSide)
+        let n = size(os)
+
+        //同一組腿之positionSide須一致
+        if (filter(os, { positionSide }).length !== n) {
+            skipGroup(g, 'anomalous')
+            continue
         }
 
-        //check
-        if (res) {
-
-            //push
-            ress.push(res)
-
+        //兩次讀不同: 部位變動中
+        if (amt !== amt2) {
+            skipGroup(g, 'positionChanging')
+            continue
         }
 
+        //部位為0: 孤單觸發會開反向部位, 全撤
+        if (amt === 0) {
+            decide(tdid, 'cancel', 'flatPosition')
+            ordersCancel.push(...os)
+            continue
+        }
+
+        //部位反向: 自動處理會放大或誤撤
+        if ((positionSide === 'LONG' && amt < 0) || (positionSide === 'SHORT' && amt > 0)) {
+            skipGroup(g, 'reversedPosition')
+            continue
+        }
+
+        //超過2筆或兩筆非一SL一TP; 方向或類型與字尾不符者不得算作保護
+        let kinds = map(os, 'kind').sort().join(',')
+        if (n > 2 || (n === 2 && kinds !== 'SL,TP') || filter(os, isLegConsistent).length !== n) {
+            skipGroup(g, 'anomalous')
+            continue
+        }
+
+        //腿量超過部位
+        let bOversized = false
+        for (let o of os) {
+            if (getKindSum(positionSide, o.kind) > Math.abs(amt) + 1e-9) {
+                bOversized = true
+            }
+        }
+        if (bOversized) {
+            skipGroup(g, 'oversized')
+            continue
+        }
+
+        //正常
+        if (n === 2) {
+            decide(tdid, 'keep', 'normal')
+            continue
+        }
+
+        //單腳: 對腳已足量成交才撤, 撤了就無保護者不撤
+        let o = os[0]
+        let kindPartner = o.kind === 'SL' ? 'TP' : 'SL'
+        let cidPartner = `${tdid}_${kindPartner}`
+        let partner = o.isAlgo
+            ? await readBinaAlgo({ client, symbol: SYMBOL, recvWindow, req: { clientAlgoId: cidPartner }, onTrace })
+            : await readBinaOrder({ client, symbol: SYMBOL, recvWindow, req: { origClientOrderId: cidPartner }, onTrace })
+        if (!partner.found) {
+            skipGroup(g, 'partnerUnconfirmed')
+            continue
+        }
+        let statusPartner = o.isAlgo ? get(partner, 'algoStatus', '') : get(partner, 'status', '')
+        let qtyPartner = cdbl(o.isAlgo ? get(partner, 'actualQty', 0) : get(partner, 'executedQty', 0))
+        let bDone = o.isAlgo ? statusPartner === 'FINISHED' : statusPartner === 'FILLED'
+        if (bDone && qtyPartner + 1e-9 >= getLegQty(o)) {
+            decide(tdid, 'cancel', 'partnerFinished')
+            ordersCancel.push(o)
+            continue
+        }
+        if (bDone) {
+            skipGroup(g, 'partnerUnconfirmed')
+            continue
+        }
+        skipGroup(g, `partnerStatus:${statusPartner}`)
+
+    }
+
+    //撤單, 一筆失敗不中斷其他筆, 但回報
+    let legsGone = []
+    await pmSeries(ordersCancel, async(o) => {
+        try {
+            let res = o.isAlgo
+                ? await opBinaContractCancelAlgoOrder(st, cstr(o.orderId), opt)
+                : await opBinaContractCancelOrder(st, cstr(o.orderId), opt)
+            //只有CANCELED才算本操作撤到; 已成交、已觸發、查無等另列, 不得當已撤
+            if (res.state === 'CANCELED') {
+                r.cancelled.push({ o, state: res.state, res })
+            }
+            else {
+                r.closedOtherwise.push({ o, state: res.state, res })
+            }
+            legsGone.push(o)
+        }
+        catch (err) {
+            r.failed.push({ o, execState: get(err, 'execState', 'unknown'), code: get(err, 'binance.code', null) })
+        }
     })
-    // console.log('ress', ress)
-    // ress [
-    //   {
-    //     orderId: 7605276918,
-    //     symbol: 'ETHUSDT',
-    //     status: 'CANCELED',
-    //     clientOrderId: 'tdid-20251206194325-Zqaa49_TP',
-    //     price: '0.00',
-    //     origQty: '0.007',
-    //     executedQty: '0.000',
-    //     cumQty: '0.000',
-    //     timeInForce: 'GTC',
-    //     type: 'TAKE_PROFIT_MARKET',
-    //     reduceOnly: true,
-    //     closePosition: false,
-    //     side: 'SELL',
-    //     positionSide: 'BOTH',
-    //     stopPrice: '3048.87',
-    //     workingType: 'MARK_PRICE',
-    //     priceProtect: false,
-    //     origType: 'TAKE_PROFIT_MARKET',
-    //     priceMatch: 'NONE',
-    //     selfTradePreventionMode: 'EXPIRE_MAKER',
-    //     goodTillDate: 0,
-    //     updateTime: 1765024172313
-    //   }
-    // ]
 
-    return ress
+    //撤單後依最新部位與剩餘之腿回報保護覆蓋, 本操作不自動處理: 0筆腿為unprotected; 有腿而某kind合計少於部位為underProtected
+    let legsLeft = filter(legs, (o) => {
+        return !legsGone.includes(o)
+    })
+    for (let p of positions2) {
+        let amt = cdbl(get(p, 'positionAmt', 0))
+        let positionSide = get(p, 'positionSide', '')
+        if (amt === 0) {
+            continue
+        }
+        let legsSide = filter(legsLeft, { positionSide })
+        if (legsSide.length === 0) {
+            r.unprotected.push({ positionSide, amt })
+            continue
+        }
+        for (let kind of ['SL', 'TP']) {
+            let legQty = 0
+            for (let o of filter(legsSide, { kind })) {
+                legQty += getLegQty(o)
+            }
+            if (legQty + 1e-9 < Math.abs(amt)) {
+                r.underProtected.push({ positionSide, kind, legQty, amt })
+            }
+        }
+    }
+
+    return r
 }
 
 

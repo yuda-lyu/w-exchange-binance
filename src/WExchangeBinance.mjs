@@ -2,10 +2,12 @@ import opBinaSpotMarket from './opBinaSpotMarket.mjs'
 import opBinaSpotLimit from './opBinaSpotLimit.mjs'
 import opBinaContractMarket from './opBinaContractMarket.mjs'
 import opBinaContractMarketEntry from './opBinaContractMarketEntry.mjs'
+import opBinaContractPlaceProtection from './opBinaContractPlaceProtection.mjs'
 import opBinaContractQuerySymbolInfor from './opBinaContractQuerySymbolInfor.mjs'
 import opBinaContractQueryAccountInfor from './opBinaContractQueryAccountInfor.mjs'
 import opBinaContractQueryPositionInfor from './opBinaContractQueryPositionInfor.mjs'
 import opBinaContractQueryOrderInfo from './opBinaContractQueryOrderInfo.mjs'
+import opBinaContractQueryOrderByClientId from './opBinaContractQueryOrderByClientId.mjs'
 import opBinaContractListOrders from './opBinaContractListOrders.mjs'
 import opBinaContractListOrdersHistory from './opBinaContractListOrdersHistory.mjs'
 import opBinaContractListTradesFilled from './opBinaContractListTradesFilled.mjs'
@@ -25,12 +27,14 @@ let WExchangeBinance = {
     //合約下單
     opBinaContractMarket,
     opBinaContractMarketEntry,
+    opBinaContractPlaceProtection,
 
     //合約查詢
     opBinaContractQuerySymbolInfor,
     opBinaContractQueryAccountInfor,
     opBinaContractQueryPositionInfor,
     opBinaContractQueryOrderInfo,
+    opBinaContractQueryOrderByClientId,
 
     //合約列舉
     opBinaContractListOrders,

@@ -1,124 +1,102 @@
-import find from 'lodash-es/find.js'
 import get from 'lodash-es/get.js'
 import cstr from 'wsemi/src/cstr.mjs'
-import isbol from 'wsemi/src/isbol.mjs'
 import isestr from 'wsemi/src/isestr.mjs'
-import { DerivativesTradingUsdsFutures } from '@binance/derivatives-trading-usds-futures'
+import iseobj from 'wsemi/src/iseobj.mjs'
+import getBinaClient from './getBinaClient.mjs'
+import { readBinaAlgo, readBinaOrder } from './readBinaLeg.mjs'
 
 
-//依照下單id去Binance查詢實際成交資訊
-//輸入: 訂單物件o, 須含 idEntry / idTp / idSl (即 d10_execute/orders/ JSON 內欄位)
-//輸出: { tdid, idEntry, idTp, idSl, resEntry, resTp, resSl }
-//resEntry 為普通單回應, resTp/resSl 為algo單回應
-//任一筆查詢失敗則該欄改成 { error: '...' }, 整體不throw讓呼叫端能逐筆判斷
+//ID一律視為字串, 不經數值轉換以免進位成他單; 未給回null, 非正整數字串或安全整數為無效
+let getIdStr = (o, key) => {
+    let v = get(o, key, null)
+    if (v === null || v === undefined || v === '') {
+        return null
+    }
+    if (Number.isSafeInteger(v) && v > 0) {
+        return String(v)
+    }
+    if (typeof v === 'string' && /^[1-9][0-9]*$/.test(v)) {
+        return v
+    }
+    throw new Error(`invalid o.${key}: must be a positive integer or a numeric string`)
+}
+
+
+/**
+ * 查進場與止損止盈三腳之實際狀態, 整體不拋錯(設定無效仍拋), 各腳以結果物件承載錯誤
+ *
+ * 每腳為{ found:true, ...單 }或{ found:false, errKind:'NOT_OBSERVED'|'UNKNOWN', code, msg }; 未給該腳之ID且無tdid時為null
+ * NOT_OBSERVED只代表本次未見(剛下單與剛觸發有落後), 不得作未執行之定論; UNKNOWN為查詢失敗
+ *
+ * 觀察回調事件見callBinaRead
+ *
+ * @param {Object} st 設定物件
+ * @param {Object} o 含idEntry、idTp、idSl(交易所ID)或tdid(以tdid_ENTRY、_SL、_TP查), 可只給tdid
+ * @param {Object} [opt={}] forceTest, onTrace
+ * @returns {Promise} resolve { tdid, idEntry, idTp, idSl, resEntry, resTp, resSl }
+ */
 let opBinaContractQueryOrderInfo = async(st, o, opt = {}) => {
 
-    //params
-    let forceTest = get(opt, 'forceTest', null)
-    let forTestAll = get(st, 'forTestAll', null)
-    let forTest = get(st, 'binance.forTest', null)
-    if (isbol(forceTest)) {
-        forTest = forceTest
+    //check
+    if (!iseobj(o)) {
+        throw new Error(`invalid o: must be an object with tdid or order ids`)
     }
-    else if (isbol(forTestAll)) {
-        forTest = forTestAll
+    let tdid = get(o, 'tdid', null)
+    let idEntry = getIdStr(o, 'idEntry')
+    let idTp = getIdStr(o, 'idTp')
+    let idSl = getIdStr(o, 'idSl')
+    if (!isestr(tdid) && idEntry === null && idTp === null && idSl === null) {
+        throw new Error(`invalid o: must have tdid or at least one of idEntry, idTp, idSl`)
     }
-    else if (!isbol(forTest)) {
-        forTest = true
-    }
-    let keyApiContract = 'apiContract'
-    if (forTest) {
-        keyApiContract = 'apiContractTest'
-    }
-    //basePath 由 settings 決定: forTest=true 用 binance.basePathTest (測試端點); forTest=false 用 binance.basePath (正式端點)
-    let basePath = forTest ? get(st, 'binance.basePathTest', '') : get(st, 'binance.basePath', '')
-    let API_KEY = get(st, `binance.${keyApiContract}.key`, '')
-    let API_SECRET = get(st, `binance.${keyApiContract}.secret`, '')
-    let SYMBOL = get(st, 'symbol', '')
 
     //client
-    let configurationRestAPI = {
-        apiKey: API_KEY,
-        apiSecret: API_SECRET,
-        basePath,
-    }
-    let client = new DerivativesTradingUsdsFutures({ configurationRestAPI })
+    let { client, SYMBOL, recvWindow } = getBinaClient(st, opt)
+    let onTrace = get(opt, 'onTrace', null)
 
     //queryRegular: 查普通單(entry使用)
-    let queryRegular = async(orderId) => {
-        if (!orderId) {
-            return null
+    let queryRegular = async() => {
+        if (idEntry !== null) {
+            return readBinaOrder({ client, symbol: SYMBOL, recvWindow, req: { orderId: idEntry }, onTrace })
         }
-        try {
-            let r = await client.restAPI.queryOrder({
-                symbol: SYMBOL,
-                orderId: isestr(orderId) ? orderId : Number(orderId),
-            })
-            return await r.data()
+        if (isestr(tdid)) {
+            return readBinaOrder({ client, symbol: SYMBOL, recvWindow, req: { origClientOrderId: `${tdid}_ENTRY` }, onTrace })
         }
-        catch (err) {
-            return { error: String(err) }
-        }
+        return null
     }
 
-    //queryAlgo: 查algo單(TP/SL使用)
-    //CONDITIONAL TP/SL 無可用單筆查詢端點(queryAlgoOrder 一律回 'Order does not exist');
-    //且 queryAllAlgoOrders(歷史端點)對「剛下、仍開啟」的單有最終一致性延遲(實測下單後數百ms即查不到),
-    //故先查 currentAllAlgoOpenOrders(對開啟中的單即時可靠), 再以 queryAllAlgoOrders 補已觸發/已撤/已成交的歷史單.
-    let queryAlgo = async(algoId) => {
-        if (!algoId) {
-            return null
+    //queryAlgo: 查algo單(TP/SL使用), openAlgoOrders→queryAlgoOrder→未見
+    let queryAlgo = async(algoId, suffix) => {
+        if (algoId !== null) {
+            return readBinaAlgo({ client, symbol: SYMBOL, recvWindow, req: { algoId }, onTrace })
         }
-        try {
-
-            //1) 開啟中(對剛下的單即時可靠)
-            let ro = await client.restAPI.currentAllAlgoOpenOrders({ symbol: SYMBOL })
-            let open = await ro.data()
-            let hitOpen = find(open, (o) => cstr(o.algoId) === cstr(algoId))
-            if (hitOpen) {
-                return hitOpen
-            }
-
-            //2) 已觸發/已撤/已成交 → 查歷史(供結算判斷成交)
-            let rh = await client.restAPI.queryAllAlgoOrders({
-                symbol: SYMBOL,
-                algoId: isestr(algoId) ? Number(algoId) : algoId,
-            })
-            let hist = await rh.data()
-            let hitHist = find(hist, (o) => cstr(o.algoId) === cstr(algoId))
-            if (hitHist) {
-                return hitHist
-            }
-
-            return { error: 'Order does not exist.' }
+        if (isestr(tdid)) {
+            return readBinaAlgo({ client, symbol: SYMBOL, recvWindow, req: { clientAlgoId: `${tdid}_${suffix}` }, onTrace })
         }
-        catch (err) {
-            return { error: String(err) }
-        }
+        return null
     }
 
     //依序查3筆(序列避免撞rate limit)
-    let resEntry = await queryRegular(o.idEntry)
-    let resTp = await queryAlgo(o.idTp)
-    let resSl = await queryAlgo(o.idSl)
+    let resEntry = await queryRegular()
+    let resTp = await queryAlgo(idTp, 'TP')
+    let resSl = await queryAlgo(idSl, 'SL')
 
     //r
     let r = {
-        tdid: o.tdid,
-        idEntry: o.idEntry,
-        idTp: o.idTp,
-        idSl: o.idSl,
+        tdid: isestr(tdid) ? tdid : null,
+        idEntry: idEntry !== null ? idEntry : (resEntry && resEntry.found ? cstr(resEntry.orderId) : null),
+        idTp: idTp !== null ? idTp : (resTp && resTp.found ? cstr(resTp.algoId) : null),
+        idSl: idSl !== null ? idSl : (resSl && resSl.found ? cstr(resSl.algoId) : null),
         resEntry,
         resTp,
         resSl,
     }
-    // console.log('r', r)
     // r {
     //   tdid: 'tdid-20260729213334-cB7pjm',
     //   idEntry: '14925106909',
     //   idTp: '1000000149617643',
     //   idSl: '1000000149617632',
     //   resEntry: {
+    //     found: true,
     //     orderId: 14925106909,
     //     symbol: 'ETHUSDT',
     //     status: 'FILLED',          //'NEW' / 'FILLED' / 'CANCELED' / 'EXPIRED' ...
@@ -129,16 +107,17 @@ let opBinaContractQueryOrderInfo = async(st, o, opt = {}) => {
     //     ...
     //   },
     //   resTp: {
+    //     found: true,
     //     algoId: 1000000149617643,
     //     symbol: 'ETHUSDT',
-    //     algoStatus: 'NEW',         //'NEW' / 'FILLED' / 'CANCELED' / 'TRIGGERED' / 'EXPIRED'
+    //     algoStatus: 'NEW',         //'NEW' / 'CANCELED' / 'TRIGGERING' / 'FINISHED' ...
     //     clientAlgoId: 'tdid-20260729213334-cB7pjm_TP',
     //     triggerPrice: '2060.54',
     //     actualQty: '0.0',          //觸發後才有值
     //     actualOrderId: '',         //觸發後產生的普通單orderId(未觸發為空)
     //     ...
     //   },
-    //   resSl: { ... 同上結構 }
+    //   resSl: { found: false, errKind: 'NOT_OBSERVED', code: -2013, msg: 'Order does not exist.' }
     // }
 
     return r

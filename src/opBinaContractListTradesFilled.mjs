@@ -4,104 +4,91 @@ import size from 'lodash-es/size.js'
 import sortBy from 'lodash-es/sortBy.js'
 import cdbl from 'wsemi/src/cdbl.mjs'
 import cstr from 'wsemi/src/cstr.mjs'
-import isbol from 'wsemi/src/isbol.mjs'
 import isestr from 'wsemi/src/isestr.mjs'
-import { DerivativesTradingUsdsFutures } from '@binance/derivatives-trading-usds-futures'
+import isfun from 'wsemi/src/isfun.mjs'
+import callBinaRead from './callBinaRead.mjs'
+import { BinaOpError, shapeArr } from './classifyBinaErr.mjs'
+import getBinaClient from './getBinaClient.mjs'
 
 
 //查詢指定起訖時間內的實際成交明細(accountTradeList)
 //Binance限制: 單次最多1000筆, 時間窗最長7天 → 自動切7天窗 + 窗內以時間續抓拉完整段
-//輸入: timeStart/timeEnd ('YYYY-MM-DDTHH:mm:ss'), opt預留
+//輸入: timeStart/timeEnd ('YYYY-MM-DDTHH:mm:ss'), opt: forceTest, onTrace
 //輸出: 正規化成交陣列, 依time升序
 //  [{ id, orderId, time, timeStr, side, positionSide, price, qty, quoteQty,
 //     commission, commissionAsset, realizedPnl, maker, buyer }]
 //注意: accountTradeList「不含」clientOrderId, 要對回tdid須以orderId join opBinaContractListOrdersHistory
+//讀取失敗拋BinaOpError(err.execState、err.binance.attempts)
 let opBinaContractListTradesFilled = async(st, ott, timeStart, timeEnd, opt = {}) => {
 
-    //forceTest
-    let forceTest = get(opt, 'forceTest', null)
-
-    //params
-    let forTestAll = get(st, 'forTestAll', null)
-    let forTest = get(st, 'binance.forTest', null)
-    if (isbol(forceTest)) {
-        forTest = forceTest
+    //check
+    if (!isfun(ott)) {
+        throw new Error(`invalid ott: must be a function`)
     }
-    else if (isbol(forTestAll)) {
-        forTest = forTestAll
-    }
-    else if (!isbol(forTest)) {
-        forTest = true
-    }
-    let keyApiContract = 'apiContract'
-    if (forTest) {
-        keyApiContract = 'apiContractTest'
-    }
-    //basePath 由 settings 決定: forTest=true 用 binance.basePathTest (測試端點); forTest=false 用 binance.basePath (正式端點)
-    let basePath = forTest ? get(st, 'binance.basePathTest', '') : get(st, 'binance.basePath', '')
-    let API_KEY = get(st, `binance.${keyApiContract}.key`, '')
-    let API_SECRET = get(st, `binance.${keyApiContract}.secret`, '')
-    let SYMBOL = get(st, 'symbol', '')
 
     //client
-    let configurationRestAPI = { apiKey: API_KEY, apiSecret: API_SECRET, basePath }
-    let client = new DerivativesTradingUsdsFutures({ configurationRestAPI })
+    let { client, SYMBOL, recvWindow } = getBinaClient(st, opt)
+    let onTrace = get(opt, 'onTrace', null)
 
     //ms範圍
     let msStart = ott(timeStart).valueOf()
     let msEnd = ott(timeEnd).valueOf()
     if (!(msStart < msEnd)) {
-        throw new Error(`timeStart[${timeStart}] 須早於 timeEnd[${timeEnd}]`)
+        throw new Error(`invalid timeStart: must be earlier than timeEnd`)
     }
 
     let WIN = 7 * 24 * 60 * 60 * 1000 //7天(Binance時間窗上限)
     let LIMIT = 1000
 
-    //逐7天窗抓取, 窗內若滿1000筆則以「最後一筆time+1」續抓
+    //逐7天窗抓取, 窗內若滿1000筆則由最後一筆time重疊續抓並以id去重(以time+1續抓, 滿頁且同毫秒尚有資料時會漏筆)
     let all = []
+    let seen = new Set()
     let winStart = msStart
     while (winStart < msEnd) {
         let winEnd = Math.min(winStart + WIN, msEnd)
 
         let curStart = winStart
         while (curStart <= winEnd) {
-            let op = await client.restAPI.accountTradeList({
+            let arr = await callBinaRead(() => client.restAPI.accountTradeList({
                 symbol: SYMBOL,
                 startTime: curStart,
                 endTime: winEnd,
                 limit: LIMIT,
-            })
-            let arr = await op.data()
+                recvWindow,
+            }), { name: 'userTrades', shape: shapeArr, onTrace })
             if (size(arr) === 0) {
                 break
             }
-            all.push(...arr)
+            let nNew = 0
+            for (let t of arr) {
+                let id = cstr(get(t, 'id', ''))
+                if (isestr(id) && !seen.has(id)) {
+                    seen.add(id)
+                    all.push(t)
+                    nNew++
+                }
+            }
             if (size(arr) < LIMIT) {
                 break
             }
-            //窗內未抓完, 從最後一筆time+1續抓
+            //窗內未抓完, 滿頁仍無新資料者無法再推進, 拋錯不得靜默漏筆
             let lastTime = Number(get(last(arr), 'time', 0))
-            if (!lastTime || lastTime < curStart) {
-                break //防呆, 避免無限迴圈
+            if (nNew === 0 || !lastTime || lastTime < curStart) {
+                throw new BinaOpError(`opBinaContractListTradesFilled failed: pagination stuck`, { execState: 'unknown', outcome: 'PAGINATION_STUCK' })
             }
-            curStart = lastTime + 1
+            curStart = lastTime
         }
 
-        winStart = winEnd //邊界ms重疊由下方id去重處理
+        winStart = winEnd
         if (winEnd >= msEnd) {
             break
         }
     }
 
-    //去重(切窗/續抓可能重疊) by id + 正規化
-    let seen = new Set()
+    //正規化
     let trades = []
     for (let t of all) {
         let id = cstr(get(t, 'id', ''))
-        if (!isestr(id) || seen.has(id)) {
-            continue
-        }
-        seen.add(id)
         let timeMs = Number(get(t, 'time', 0))
         trades.push({
             id,

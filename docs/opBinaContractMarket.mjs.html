@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    
+    <meta charset="utf-8">
+    <title>opBinaContractMarket.mjs - Documentation</title>
+    
+    
+    <script src="scripts/prettify/prettify.js"></script>
+    <script src="scripts/prettify/lang-css.js"></script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc.css">
+    <script src="scripts/nav.js" defer></script>
+    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body>
+
+<input type="checkbox" id="nav-trigger" class="nav-trigger" />
+<label for="nav-trigger" class="navicon-button x">
+  <div class="navicon"></div>
+</label>
+
+<label for="nav-trigger" class="overlay"></label>
+
+<nav >
+    
+    
+    <h2><a href="index.html">Home</a></h2><h3>Global</h3><ul><li><a href="global.html#callBinaRead">callBinaRead</a></li><li><a href="global.html#cancelBinaAll">cancelBinaAll</a></li><li><a href="global.html#cancelBinaSingle">cancelBinaSingle</a></li><li><a href="global.html#classifyBinaErr">classifyBinaErr</a></li><li><a href="global.html#getBinaClient">getBinaClient</a></li><li><a href="global.html#getBinaSpotClient">getBinaSpotClient</a></li><li><a href="global.html#opBinaContractCancelAlgoOrder">opBinaContractCancelAlgoOrder</a></li><li><a href="global.html#opBinaContractCancelAllAlgoOrder">opBinaContractCancelAllAlgoOrder</a></li><li><a href="global.html#opBinaContractCancelAllOrder">opBinaContractCancelAllOrder</a></li><li><a href="global.html#opBinaContractCancelOrder">opBinaContractCancelOrder</a></li><li><a href="global.html#opBinaContractCancelResidualOrders">opBinaContractCancelResidualOrders</a></li><li><a href="global.html#opBinaContractListOrders">opBinaContractListOrders</a></li><li><a href="global.html#opBinaContractMarket">opBinaContractMarket</a></li><li><a href="global.html#opBinaContractMarketEntry">opBinaContractMarketEntry</a></li><li><a href="global.html#opBinaContractPlaceProtection">opBinaContractPlaceProtection</a></li><li><a href="global.html#opBinaContractQueryAccountInfor">opBinaContractQueryAccountInfor</a></li><li><a href="global.html#opBinaContractQueryOrderByClientId">opBinaContractQueryOrderByClientId</a></li><li><a href="global.html#opBinaContractQueryOrderInfo">opBinaContractQueryOrderInfo</a></li><li><a href="global.html#opBinaContractQueryPositionInfor">opBinaContractQueryPositionInfor</a></li><li><a href="global.html#opBinaContractQuerySymbolInfor">opBinaContractQuerySymbolInfor</a></li><li><a href="global.html#opBinaSpotLimit">opBinaSpotLimit</a></li><li><a href="global.html#opBinaSpotMarket">opBinaSpotMarket</a></li><li><a href="global.html#placeBinaProtect">placeBinaProtect</a></li><li><a href="global.html#reconcileBinaOrder">reconcileBinaOrder</a></li><li><a href="global.html#toBinaOpError">toBinaOpError</a></li></ul>
+    
+</nav>
+
+<div id="main">
+    
+    <h1 class="page-title">opBinaContractMarket.mjs</h1>
+    
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>import get from 'lodash-es/get.js'
+import cdbl from 'wsemi/src/cdbl.mjs'
+import cstr from 'wsemi/src/cstr.mjs'
+import delay from 'wsemi/src/delay.mjs'
+import dig from 'wsemi/src/dig.mjs'
+import isenum from 'wsemi/src/isenum.mjs'
+import isfun from 'wsemi/src/isfun.mjs'
+import isp0int from 'wsemi/src/isp0int.mjs'
+import binaInFlight from './binaInFlight.mjs'
+import calcContractQuantity, { checkUTradeNotional } from './calcContractQuantity.mjs'
+import callBinaRead from './callBinaRead.mjs'
+import { BinaOpError, classifyBinaErr, sendBina, shapeCode200, shapeEntry, shapeLeverage, shapeMark, shapePositions, toBinanceInfo } from './classifyBinaErr.mjs'
+import getBinaClient from './getBinaClient.mjs'
+import placeBinaProtect, { GAP_MS, getProtectOutcome } from './placeBinaProtect.mjs'
+import { readBinaAlgo, readBinaOrder } from './readBinaLeg.mjs'
+import reconcileBinaOrder, { getPosAmt } from './reconcileBinaOrder.mjs'
+
+
+//tdid不含底線: 殘單與歷史依字尾解析; 加_ENTRY不超過幣安之36字元上限
+let REG_TDID = /^[.A-Z:/a-z0-9-]{1,30}$/
+
+
+/**
+ * 合約市價進場並掛止損止盈, 全程皆成才回傳, 其餘一律拋BinaOpError
+ *
+ * err.outcome:
+ * - TDID_IN_FLIGHT, TDID_USED: 本次未送單(err.state.sentThisCall為false); 前次可能已成交, 見err.state(TDID_IN_FLIGHT之前次狀態在err.state.previous), 不得換新ID重下
+ * - NOT_ENTERED: err.state.stage為precheck、setup、mark、deadline、entry, 本次未增加部位(不代表帳戶無部位)
+ * - ENTRY_UNKNOWN: 進場狀態未知, 未掛保護, 不得重送; 同程序內該tdid不釋放(再呼叫得TDID_IN_FLIGHT), 重啟後未過err.state.entry.conclusiveAfter不得重呼叫
+ * - ENTERED_PARTIAL_UNKNOWN: 已知部分成交而終局未明, 已嘗試以已知量掛保護, 兩腳結果須判err.state.sl、err.state.tp與err.state.protectOutcome(null為兩腳皆掛上)
+ * - ENTERED_SL_ONLY, ENTERED_TP_ONLY, ENTERED_UNPROTECTED, ENTERED_PROTECTION_UNKNOWN, ENTERED_POSITION_CHANGED: 進場已成交, 保護單未全部確認, 本函數不自動平倉, 須由呼叫端接手(可用opBinaContractPlaceProtection補掛); reason:conflict表同ID舊單量價不符而未掛
+ *
+ * err.execState: NOT_ENTERED為'notExecuted'(指本次), TDID類與ENTRY_UNKNOWN為'unknown', ENTERED類為'executed'
+ *
+ * 呼叫端義務: 呼叫前把tdid與意圖落盤; tdid須全域唯一, 查得0成交終局者再呼叫得TDID_USED, 須換新; 不得以Promise.race包裝本操作後另起新tdid(外層放棄不會中止已送之單)
+ *
+ * 成功回傳之quantity為實際成交量, uTradeReal以成交量計, priceStart仍為標記價
+ *
+ * 觀察回調事件見callBinaRead、reconcileBinaOrder、placeBinaProtect
+ *
+ * @param {Object} st 設定物件
+ * @param {Function} ott 時間函數
+ * @param {String} mode 'long'或'short'
+ * @param {String} tdid 交易識別字, ^[.A-Z:/a-z0-9-]{1,30}$
+ * @param {Number|String} uTrade 下單金額(有效數字)
+ * @param {Number|String} rTakeProfit 止盈比例, 大於0小於0.25
+ * @param {Number|String} rStopLoss 止損比例, 大於0小於0.15
+ * @param {Object} [opt={}] forceTest, setLever, setCrossMargin, setDualSide, entryDeadlineMs(進場前已超過此毫秒即不送單), onTrace
+ * @returns {Promise} resolve成功結果, reject BinaOpError
+ */
+let opBinaContractMarket = async(st, ott, mode, tdid, uTrade, rTakeProfit, rStopLoss, opt = {}) => {
+
+    let tStart = performance.now()
+
+    //check ott
+    if (!isfun(ott)) {
+        throw new Error(`invalid ott: must be a function`)
+    }
+
+    //check mode
+    if (mode !== 'long' &amp;&amp; mode !== 'short') {
+        throw new Error(`invalid mode: must be 'long' or 'short'`)
+    }
+
+    //check tdid
+    if (typeof tdid !== 'string' || !REG_TDID.test(tdid)) {
+        throw new Error(`invalid tdid: must be a string of 1 to 30 characters from A-Z a-z 0-9 . : / -`)
+    }
+
+    //check uTrade
+    let uTradeDef = get(st, 'uTrade', '')
+    let notional = get(st, 'notional', '') //最小名義價值(交易所MIN_NOTIONAL), 未設定則不檢不補量
+    if (!isenum(uTrade)) {
+        throw new Error(`invalid uTrade: must be a valid number`)
+    }
+    uTrade = cdbl(uTrade)
+    if (uTrade &lt; cdbl(uTradeDef)) {
+        throw new Error(`invalid uTrade: must not be less than st.uTrade`)
+    }
+    uTrade = dig(uTrade, 2)
+
+    //check notional, uTrade須不低於最小名義價值, 於任何API呼叫前先檢
+    checkUTradeNotional(uTrade, notional)
+
+    //check rTakeProfit
+    if (!isenum(rTakeProfit) || cdbl(rTakeProfit) &lt;= 0 || cdbl(rTakeProfit) >= 0.25) {
+        throw new Error(`invalid rTakeProfit: must be a number greater than 0 and less than 0.25`)
+    }
+    rTakeProfit = cdbl(rTakeProfit)
+
+    //check rStopLoss
+    if (!isenum(rStopLoss) || cdbl(rStopLoss) &lt;= 0 || cdbl(rStopLoss) >= 0.15) {
+        throw new Error(`invalid rStopLoss: must be a number greater than 0 and less than 0.15`)
+    }
+    rStopLoss = cdbl(rStopLoss)
+
+    //check settings
+    let quantityLow = get(st, 'quantityLow', '')
+    let digPrice = get(st, 'digPrice', '')
+    let digContractQuantity = get(st, 'digContractQuantity', '')
+    if (!isp0int(digPrice)) {
+        throw new Error(`invalid st.digPrice: must be a non-negative integer`)
+    }
+    if (!isp0int(digContractQuantity)) {
+        throw new Error(`invalid st.digContractQuantity: must be a non-negative integer`)
+    }
+
+    //opt, 非預期視為未給
+    let setLever = get(opt, 'setLever', false) === true
+    let setCrossMargin = get(opt, 'setCrossMargin', false) === true
+    let setDualSide = get(opt, 'setDualSide', false) === true
+    let entryDeadlineMs = get(opt, 'entryDeadlineMs', null)
+    if (!isenum(entryDeadlineMs) || cdbl(entryDeadlineMs) &lt;= 0) {
+        entryDeadlineMs = null
+    }
+    let onTrace = get(opt, 'onTrace', null)
+
+    //client
+    let { client, SYMBOL, basePath, recvWindow } = getBinaClient(st, opt)
+
+    //idir, sideIn, sideOut, pos
+    let idir = mode === 'short' ? -1 : 1
+    let sideIn = mode === 'short' ? 'SELL' : 'BUY'
+    let sideOut = mode === 'short' ? 'BUY' : 'SELL'
+    let pos = mode === 'short' ? 'SHORT' : 'LONG'
+
+    //cid
+    let cidEntry = `${tdid}_ENTRY`
+    let cidSl = `${tdid}_SL`
+    let cidTp = `${tdid}_TP`
+
+    //state, 拋錯時帶給呼叫端
+    let state = {
+        tdid,
+        stage: null,
+        setup: {},
+        entry: { status: 'notSent', orderId: null, clientOrderId: cidEntry, executedQty: null, maxExecutedQty: null, tSign: null, conclusiveAfter: null, confirmedBy: null, reason: null, res: null },
+        sl: { status: 'notSent', algoId: null, clientAlgoId: cidSl, reason: null, tSign: null, conclusiveAfter: null, res: null },
+        tp: { status: 'notSent', algoId: null, clientAlgoId: cidTp, reason: null, tSign: null, conclusiveAfter: null, res: null },
+    }
+
+    let fail = (outcome, execState, err = null) => {
+        let info = err ? classifyBinaErr(err) : null
+        return new BinaOpError(`opBinaContractMarket failed: ${outcome}`, {
+            outcome,
+            execState,
+            state,
+            binance: err &amp;&amp; err.binance ? err.binance : (info ? toBinanceInfo(info) : null),
+            cause: err || undefined,
+        })
+    }
+
+    let notEntered = (stage, err = null) => {
+        state.stage = stage
+        return fail('NOT_ENTERED', 'notExecuted', err)
+    }
+
+    //同程序在途防護, 與MarketEntry共用, 鍵為實際之進場ID
+    let keyInFlight = `${basePath}|${cidEntry}`
+    if (binaInFlight.has(keyInFlight)) {
+        state.sentThisCall = false
+        state.previous = binaInFlight.get(keyInFlight)
+        throw fail('TDID_IN_FLIGHT', 'unknown')
+    }
+    binaInFlight.set(keyInFlight, state)
+
+    let keepInFlight = false
+    try {
+
+        //TDID閘: 同ID已成交後重送會被接受而部位加倍, 故送單前先查. -2013只代表本次未觀察到, 跨程序靠呼叫端落盤
+        let gate = await readBinaOrder({ client, symbol: SYMBOL, recvWindow, req: { origClientOrderId: cidEntry }, onTrace })
+        if (gate.found) {
+            let readLeg = async (legBase, clientAlgoId) => {
+                let res = await readBinaAlgo({ client, symbol: SYMBOL, recvWindow, req: { clientAlgoId }, onTrace })
+                let status = 'found'
+                if (!res.found) {
+                    status = res.errKind === 'NOT_OBSERVED' ? 'notObserved' : 'unknown'
+                }
+                return { ...legBase, status, algoId: res.found ? cstr(res.algoId) : null, res }
+            }
+            state.entry = { ...state.entry, status: 'found', orderId: cstr(gate.orderId), executedQty: gate.executedQty, res: gate }
+            state.sl = await readLeg(state.sl, cidSl)
+            state.tp = await readLeg(state.tp, cidTp)
+            state.sentThisCall = false
+            throw fail('TDID_USED', 'unknown')
+        }
+        if (gate.errKind !== 'NOT_OBSERVED') {
+            state.entry.reason = 'precheckFailed'
+            state.entry.precheck = { errKind: gate.errKind, code: gate.code, msg: gate.msg }
+            throw notEntered('precheck')
+        }
+
+        //帳戶設定, 冪等, 重呼叫安全; -4046、-4059判無須變更, 不比對字串
+        let runSetup = async (name, fn, shape) => {
+            try {
+                await sendBina(fn, shape)
+                state.setup[name] = 'changed'
+            }
+            catch (err) {
+                let info = classifyBinaErr(err)
+                if (info.kind === 'noChange') {
+                    state.setup[name] = 'unchanged'
+                    return
+                }
+                state.setup[name] = info.execState === 'notExecuted' ? 'rejected' : 'unknown'
+                throw notEntered('setup', err)
+            }
+        }
+
+        //槓桿改為1x
+        if (setLever) {
+            await runSetup('lever', () => client.restAPI.changeInitialLeverage({ symbol: SYMBOL, leverage: 1, recvWindow }), shapeLeverage)
+        }
+
+        //使用全倉
+        if (setCrossMargin) {
+            await runSetup('crossMargin', () => client.restAPI.changeMarginType({ symbol: SYMBOL, marginType: 'CROSSED', recvWindow }), shapeCode200)
+        }
+
+        //同時存在多空倉位(Hedge mode)
+        if (setDualSide) {
+            await runSetup('dualSide', () => client.restAPI.changePositionMode({ dualSidePosition: true, recvWindow }), shapeCode200)
+        }
+
+        //標記價與部位快照, 閘過後才讀, 止損止盈價才新
+        let price = null
+        let posBefore = null
+        try {
+            let rs = await Promise.all([
+                callBinaRead(() => client.restAPI.markPrice({ symbol: SYMBOL }), { name: 'markPrice', shape: shapeMark, onTrace }),
+                callBinaRead(() => client.restAPI.positionInformationV3({ symbol: SYMBOL, recvWindow }), { name: 'positionRisk', shape: shapePositions, onTrace }),
+            ])
+            price = get(rs[0], 'markPrice', '')
+            posBefore = getPosAmt(rs[1], pos)
+        }
+        catch (err) {
+            throw notEntered('mark', err)
+        }
+
+        //下單設定止盈止損價格(USDT)
+        let priceTakeProfit = dig((1 + idir * rTakeProfit) * cdbl(price), digPrice)
+        let priceStopLoss = dig((1 - idir * rStopLoss) * cdbl(price), digPrice)
+
+        //quantity, 向下取整至step, 名義(標記價*數量)不足notional時只補1個step, 不足quantityLow拋錯
+        let quantity = null
+        try {
+            quantity = calcContractQuantity(uTrade, price, digContractQuantity, { quantityLow, notional })
+        }
+        catch (err) {
+            state.entry.reason = 'quantityInvalid'
+            throw notEntered('mark', err)
+        }
+
+        //外層時限已過即不送單
+        if (entryDeadlineMs !== null &amp;&amp; performance.now() - tStart > cdbl(entryDeadlineMs)) {
+            throw notEntered('deadline')
+        }
+
+        //進場, RESULT: 回應逐欄核驗, 非FILLED走回查. 進場單一律不重送(同ID依序重送會重複成交)
+        let tSign = performance.now()
+        let tSignWall = Date.now()
+        state.entry.tSign = tSignWall
+        let resEntry = null
+        let source = null
+        let seed = null
+        let errEntry = null
+        let notes = []
+        try {
+            resEntry = await sendBina(() => client.restAPI.newOrder({
+                symbol: SYMBOL,
+                side: sideIn,
+                positionSide: pos,
+                type: 'MARKET',
+                quantity,
+                newClientOrderId: cidEntry,
+                newOrderRespType: 'RESULT',
+                recvWindow,
+            }), shapeEntry(cidEntry))
+            if (resEntry.status !== 'FILLED' || cdbl(resEntry.executedQty) &lt;= 0) {
+                source = 'server'
+                seed = resEntry
+            }
+        }
+        catch (err) {
+            let info = classifyBinaErr(err)
+            errEntry = err
+            if (info.kind === 'duplicate') {
+                state.entry.status = 'found'
+                state.sentThisCall = false
+                throw fail('TDID_USED', 'unknown', err)
+            }
+            if (info.execState === 'notExecuted') {
+                state.entry.status = 'rejected'
+                state.entry.reason = 'rejected'
+                state.entry.confirmedBy = 'rejectedByExchange'
+                throw notEntered('entry', err)
+            }
+            source = info.source
+        }
+
+        //回查
+        let executedQty = get(resEntry, 'executedQty', '0')
+        let bPartial = false
+        if (source !== null) {
+            let rec = await reconcileBinaOrder({
+                client,
+                symbol: SYMBOL,
+                cid: cidEntry,
+                side: sideIn,
+                positionSide: pos,
+                origQty: quantity,
+                posBefore,
+                tSign,
+                tSignWall,
+                source,
+                seed,
+                recvWindow,
+                onTrace,
+            })
+            state.entry.tSign = rec.tSign
+            state.entry.conclusiveAfter = rec.conclusiveAfter
+            state.entry.confirmedBy = rec.confirmedBy
+            state.entry.reason = rec.reason
+            state.entry.maxExecutedQty = rec.maxExecutedQty
+            state.entry.res = rec.order
+            if (rec.conclusion === 'terminalZero' || rec.conclusion === 'notExecuted') {
+                state.entry.status = 'notExecuted'
+                state.entry.executedQty = '0'
+                throw notEntered('entry')
+            }
+            if (rec.conclusion === 'unknown') {
+                state.entry.status = 'unknown'
+                keepInFlight = true
+                throw fail('ENTRY_UNKNOWN', 'unknown', errEntry)
+            }
+            if (rec.conclusion === 'partial') {
+                bPartial = true
+                keepInFlight = true
+                executedQty = rec.maxExecutedQty
+            }
+            else {
+                executedQty = rec.executedQty
+            }
+            resEntry = rec.order
+            notes.push('entry:reconciled')
+        }
+
+        state.entry.status = bPartial ? 'partial' : 'filled'
+        state.entry.orderId = cstr(get(resEntry, 'orderId', ''))
+        state.entry.executedQty = executedQty
+        state.entry.maxExecutedQty = executedQty
+        state.entry.res = resEntry
+
+        //止損止盈, 數量一律實際成交量
+        let protectBase = {
+            client,
+            symbol: SYMBOL,
+            side: sideOut,
+            positionSide: pos,
+            quantity: executedQty,
+            minPos: Math.abs(posBefore) + cdbl(executedQty), //重送前排除已觸發之基準: 進場後部位至少應有之量
+            recvWindow,
+            onTrace,
+        }
+
+        //幣安帶單有下單速率限制20筆/10s, 每單至少500ms
+        await delay(GAP_MS)
+
+        //止損
+        //2025-12-09起Binance將條件單(STOP_MARKET/TAKE_PROFIT_MARKET等)強制走algoOrder, 否則回-4120
+        state.sl = await placeBinaProtect({ ...protectBase, cid: cidSl, type: 'STOP_MARKET', triggerPrice: priceStopLoss })
+
+        //止損triggered即不掛止盈: 部位已動, 孤單會反向
+        if (state.sl.status !== 'triggered') {
+
+            //幣安帶單有下單速率限制20筆/10s, 每單至少500ms
+            await delay(GAP_MS)
+
+            //止盈
+            state.tp = await placeBinaProtect({ ...protectBase, cid: cidTp, type: 'TAKE_PROFIT_MARKET', triggerPrice: priceTakeProfit })
+
+            //幣安帶單有下單速率限制20筆/10s, 每單至少500ms
+            await delay(GAP_MS)
+
+        }
+
+        let outcome = getProtectOutcome(state.sl, state.tp)
+        state.protectOutcome = outcome
+        if (bPartial) {
+            throw fail('ENTERED_PARTIAL_UNKNOWN', 'executed')
+        }
+        if (outcome !== null) {
+            throw fail(outcome, 'executed')
+        }
+
+        //SDK將大於Number.MAX_SAFE_INTEGER的整數parse為bigint, 故ID統一cstr()持有
+        let idEntry = cstr(get(resEntry, 'orderId', ''))
+        let idTp = state.tp.algoId
+        let idSl = state.sl.algoId
+        let resTp = state.tp.res
+        let resSl = state.sl.res
+
+        //uCost
+        let uCost = dig(cdbl(price) * cdbl(executedQty), 2)
+
+        //time, 此時部位與兩腳皆已成立, 呼叫端傳入之時間函數失敗不得讓結果遺失
+        let time = ''
+        try {
+            time = ott(get(resEntry, 'updateTime', '')).format('YYYY-MM-DDTHH:mm:ss')
+        }
+        catch (err) {
+            notes.push('timeStart:formatFailed')
+        }
+
+        return {
+
+            mode,
+
+            symbol: SYMBOL,
+
+            quantity: executedQty,
+
+            timeStart: time,
+            priceStart: price,
+            uTrade,
+            uTradeReal: uCost,
+
+            rTakeProfit,
+            priceTakeProfit,
+
+            rStopLoss,
+            priceStopLoss,
+
+            idTrade: tdid,
+            idEntry,
+            idTp, //實際是algoId(已String化), 保留欄位名供下游零改動
+            idSl, //實際是algoId(已String化), 保留欄位名供下游零改動
+
+            clientOrderIdEntry: cidEntry,
+            clientOrderIdTp: cidTp, //實際是clientAlgoId, 保留欄位名供下游零改動
+            clientOrderIdSl: cidSl, //實際是clientAlgoId, 保留欄位名供下游零改動
+
+            //algo專用語意欄位, 取消時依此判斷走普通還是algo路徑
+            isAlgoTp: true,
+            isAlgoSl: true,
+            algoIdTp: idTp,
+            algoIdSl: idSl,
+            clientAlgoIdTp: cidTp,
+            clientAlgoIdSl: cidSl,
+
+            resEntry,
+            resTp,
+            resSl,
+
+            notes,
+
+        }
+
+    }
+    finally {
+        if (!keepInFlight) {
+            binaInFlight.delete(keyInFlight)
+        }
+    }
+
+}
+
+
+export { REG_TDID }
+export default opBinaContractMarket
+</code></pre>
+        </article>
+    </section>
+
+
+
+
+    
+    
+</div>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 4.0.5</a> on Tue Nov 03 2026 21:42:36 GMT+0800 (台北標準時間) using the <a href="https://github.com/clenemt/docdash">docdash</a> theme.
+</footer>
+
+<script>prettyPrint();</script>
+<script src="scripts/polyfill.js"></script>
+<script src="scripts/linenumber.js"></script>
+
+
+
+</body>
+</html>

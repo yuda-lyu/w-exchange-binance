@@ -12,30 +12,38 @@ let main = async() => {
 
     let res = await webina.opBinaContractCancelOrder(st, orderId)
     console.log('res', res)
+    //目標是這張單不再開啟: -2011不再拋, 依state與positionChanged判讀; 判不了時拋BinaOpError(err.execState='unknown'), 不可視為已撤
     // res {
-    //   orderId: 9253619056,
-    //   symbol: 'ETHUSDT',
-    //   status: 'CANCELED',
-    //   clientOrderId: 'KgUGGEwT2WVt5appBQu7qj',
-    //   price: '1396.95',
-    //   origQty: '0.020',
+    //   state: 'CANCELED', //CANCELED, FILLED, EXPIRED, EXPIRED_IN_MATCH, REJECTED, NOT_FOUND
+    //   alreadyClosed: false, //只在查得終局時為true
+    //   positionChanged: false, //true時部位已變, 呼叫端須判讀
     //   executedQty: '0.000',
-    //   cumQty: '0.000',
-    //   timeInForce: 'GTC',
-    //   type: 'LIMIT',
-    //   reduceOnly: false,
-    //   closePosition: false,
-    //   side: 'BUY',
-    //   positionSide: 'LONG',
-    //   stopPrice: '0.00',
-    //   workingType: 'CONTRACT_PRICE',
-    //   priceProtect: false,
-    //   origType: 'LIMIT',
-    //   priceMatch: 'NONE',
-    //   selfTradePreventionMode: 'EXPIRE_MAKER',
-    //   goodTillDate: 0,
-    //   updateTime: 1780759499844
+    //   res: {
+    //     orderId: 9253619056,
+    //     symbol: 'ETHUSDT',
+    //     status: 'CANCELED',
+    //     clientOrderId: 'KgUGGEwT2WVt5appBQu7qj',
+    //     price: '1396.95',
+    //     origQty: '0.020',
+    //     executedQty: '0.000',
+    //     cumQty: '0.000',
+    //     timeInForce: 'GTC',
+    //     type: 'LIMIT',
+    //     reduceOnly: false,
+    //     closePosition: false,
+    //     side: 'BUY',
+    //     positionSide: 'LONG',
+    //     stopPrice: '0.00',
+    //     workingType: 'CONTRACT_PRICE',
+    //     priceProtect: false,
+    //     origType: 'LIMIT',
+    //     priceMatch: 'NONE',
+    //     selfTradePreventionMode: 'EXPIRE_MAKER',
+    //     goodTillDate: 0,
+    //     updateTime: 1780759499844
+    //   }
     // }
+    //亦可以自訂ID取消: webina.opBinaContractCancelOrder(st, { clientOrderId: 'xxx' })
 
 }
 await main()

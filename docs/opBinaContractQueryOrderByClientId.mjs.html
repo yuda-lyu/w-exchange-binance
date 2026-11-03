@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    
+    <meta charset="utf-8">
+    <title>opBinaContractQueryOrderByClientId.mjs - Documentation</title>
+    
+    
+    <script src="scripts/prettify/prettify.js"></script>
+    <script src="scripts/prettify/lang-css.js"></script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc.css">
+    <script src="scripts/nav.js" defer></script>
+    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body>
+
+<input type="checkbox" id="nav-trigger" class="nav-trigger" />
+<label for="nav-trigger" class="navicon-button x">
+  <div class="navicon"></div>
+</label>
+
+<label for="nav-trigger" class="overlay"></label>
+
+<nav >
+    
+    
+    <h2><a href="index.html">Home</a></h2><h3>Global</h3><ul><li><a href="global.html#callBinaRead">callBinaRead</a></li><li><a href="global.html#cancelBinaAll">cancelBinaAll</a></li><li><a href="global.html#cancelBinaSingle">cancelBinaSingle</a></li><li><a href="global.html#classifyBinaErr">classifyBinaErr</a></li><li><a href="global.html#getBinaClient">getBinaClient</a></li><li><a href="global.html#getBinaSpotClient">getBinaSpotClient</a></li><li><a href="global.html#opBinaContractCancelAlgoOrder">opBinaContractCancelAlgoOrder</a></li><li><a href="global.html#opBinaContractCancelAllAlgoOrder">opBinaContractCancelAllAlgoOrder</a></li><li><a href="global.html#opBinaContractCancelAllOrder">opBinaContractCancelAllOrder</a></li><li><a href="global.html#opBinaContractCancelOrder">opBinaContractCancelOrder</a></li><li><a href="global.html#opBinaContractCancelResidualOrders">opBinaContractCancelResidualOrders</a></li><li><a href="global.html#opBinaContractListOrders">opBinaContractListOrders</a></li><li><a href="global.html#opBinaContractMarket">opBinaContractMarket</a></li><li><a href="global.html#opBinaContractMarketEntry">opBinaContractMarketEntry</a></li><li><a href="global.html#opBinaContractPlaceProtection">opBinaContractPlaceProtection</a></li><li><a href="global.html#opBinaContractQueryAccountInfor">opBinaContractQueryAccountInfor</a></li><li><a href="global.html#opBinaContractQueryOrderByClientId">opBinaContractQueryOrderByClientId</a></li><li><a href="global.html#opBinaContractQueryOrderInfo">opBinaContractQueryOrderInfo</a></li><li><a href="global.html#opBinaContractQueryPositionInfor">opBinaContractQueryPositionInfor</a></li><li><a href="global.html#opBinaContractQuerySymbolInfor">opBinaContractQuerySymbolInfor</a></li><li><a href="global.html#opBinaSpotLimit">opBinaSpotLimit</a></li><li><a href="global.html#opBinaSpotMarket">opBinaSpotMarket</a></li><li><a href="global.html#placeBinaProtect">placeBinaProtect</a></li><li><a href="global.html#reconcileBinaOrder">reconcileBinaOrder</a></li><li><a href="global.html#toBinaOpError">toBinaOpError</a></li></ul>
+    
+</nav>
+
+<div id="main">
+    
+    <h1 class="page-title">opBinaContractQueryOrderByClientId.mjs</h1>
+    
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>import get from 'lodash-es/get.js'
+import isestr from 'wsemi/src/isestr.mjs'
+import iseobj from 'wsemi/src/iseobj.mjs'
+import getBinaClient from './getBinaClient.mjs'
+import { readBinaAlgo, readBinaOrder } from './readBinaLeg.mjs'
+
+
+/**
+ * 以自訂ID查單, 供下單狀態未知時回查. 查詢結果以結果物件承載, 不因查無或網路失敗而拋錯(設定無效仍拋)
+ *
+ * errKind: 'NOT_OBSERVED'只代表本次未見(剛下單與剛觸發有落後), 不得作未執行之定論; 'UNKNOWN'為查詢失敗
+ *
+ * 觀察回調事件見callBinaRead
+ *
+ * @param {Object} st 設定物件
+ * @param {Object} ids { clientOrderId }普通單或{ clientAlgoId }algo單, 擇一
+ * @param {Object} [opt={}] forceTest, symbol(預設st.symbol), onTrace
+ * @returns {Promise} resolve { found, order, errKind, code, msg }
+ */
+let opBinaContractQueryOrderByClientId = async(st, ids, opt = {}) => {
+
+    //check
+    if (!iseobj(ids)) {
+        throw new Error(`invalid ids: must be an object with clientOrderId or clientAlgoId`)
+    }
+    let clientOrderId = get(ids, 'clientOrderId', null)
+    let clientAlgoId = get(ids, 'clientAlgoId', null)
+    if (isestr(clientOrderId) === isestr(clientAlgoId)) {
+        throw new Error(`invalid ids: must have exactly one of clientOrderId, clientAlgoId as a non-empty string`)
+    }
+
+    //client
+    let symbolOpt = get(opt, 'symbol', '')
+    let { client, SYMBOL, recvWindow } = getBinaClient(st, opt, { useSymbol: !isestr(symbolOpt) })
+    let symbol = isestr(symbolOpt) ? symbolOpt : SYMBOL
+    let onTrace = get(opt, 'onTrace', null)
+
+    //查
+    let r = isestr(clientOrderId)
+        ? await readBinaOrder({ client, symbol, recvWindow, req: { origClientOrderId: clientOrderId }, onTrace })
+        : await readBinaAlgo({ client, symbol, recvWindow, req: { clientAlgoId }, onTrace })
+    if (r.found) {
+        let { found, ...order } = r
+        return { found, order, errKind: null, code: null, msg: '' }
+    }
+    return { found: false, order: null, errKind: r.errKind, code: r.code, msg: r.msg }
+}
+
+
+export default opBinaContractQueryOrderByClientId
+</code></pre>
+        </article>
+    </section>
+
+
+
+
+    
+    
+</div>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 4.0.5</a> on Tue Nov 03 2026 21:42:36 GMT+0800 (台北標準時間) using the <a href="https://github.com/clenemt/docdash">docdash</a> theme.
+</footer>
+
+<script>prettyPrint();</script>
+<script src="scripts/polyfill.js"></script>
+<script src="scripts/linenumber.js"></script>
+
+
+
+</body>
+</html>

@@ -19,11 +19,22 @@
 
         basePath: 'https://fapi.binance.com', //正式合約或帶單合約網址(forTest=false)
         basePathTest: 'https://demo-fapi.binance.com', //測試合約網址(forTest=true, 含test顯式覆寫)
-        
+
+        //以下網址與金鑰為空即拋錯, 不回落正式端點; forTest=true時給正式端點亦拋錯
+        basePathSpot: 'https://api.binance.com', //正式現貨網址(forTest=false)
+        basePathSpotTest: 'https://demo-api.binance.com', //測試現貨網址(forTest=true)
+
         apiSpot: {
             'name': 'qtdSpot',
             'key': '',
             'secret': '',
+        },
+
+        //測試現貨api
+        apiSpotTest: {
+            'name': '{name}',
+            'key': '{key}',
+            'secret': '{secret}',
         },
 
         //合約api: https://www.binance.com/en/my/settings/api-management

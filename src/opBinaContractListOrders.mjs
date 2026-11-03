@@ -1,53 +1,29 @@
 import get from 'lodash-es/get.js'
 import map from 'lodash-es/map.js'
 import cstr from 'wsemi/src/cstr.mjs'
-import isbol from 'wsemi/src/isbol.mjs'
-import { DerivativesTradingUsdsFutures } from '@binance/derivatives-trading-usds-futures'
+import callBinaRead from './callBinaRead.mjs'
+import { shapeArr } from './classifyBinaErr.mjs'
+import getBinaClient from './getBinaClient.mjs'
 
 
+/**
+ * 列當前未成交單(普通單與algo單), 讀取失敗拋BinaOpError(err.execState、err.binance.attempts)
+ *
+ * @param {Object} st 設定物件
+ * @param {Object} [opt={}] forceTest, onTrace
+ * @returns {Promise} resolve單陣列
+ */
 let opBinaContractListOrders = async(st, opt = {}) => {
 
-    //params
-    let forceTest = get(opt, 'forceTest', null)
-    let forTestAll = get(st, 'forTestAll', null)
-    let forTest = get(st, 'binance.forTest', null)
-    if (isbol(forceTest)) {
-        forTest = forceTest
-    }
-    else if (isbol(forTestAll)) {
-        forTest = forTestAll
-    }
-    else if (!isbol(forTest)) {
-        forTest = true
-    }
-    let keyApiContract = 'apiContract'
-    if (forTest) {
-        keyApiContract = 'apiContractTest'
-    }
-    //basePath 由 settings 決定: forTest=true 用 binance.basePathTest (測試端點); forTest=false 用 binance.basePath (正式端點)
-    let basePath = forTest ? get(st, 'binance.basePathTest', '') : get(st, 'binance.basePath', '')
-    let API_KEY = get(st, `binance.${keyApiContract}.key`, '')
-    let API_SECRET = get(st, `binance.${keyApiContract}.secret`, '')
-    let SYMBOL = get(st, 'symbol', '')
-    // console.log('API_KEY', API_KEY)
-    // console.log('API_SECRET', API_SECRET)
-    // console.log('SYMBOL', SYMBOL)
-
     //client
-    let configurationRestAPI = {
-        apiKey: API_KEY,
-        apiSecret: API_SECRET,
-        basePath,
-    }
-    let client = new DerivativesTradingUsdsFutures({ configurationRestAPI })
+    let { client, SYMBOL, recvWindow } = getBinaClient(st, opt)
+    let onTrace = get(opt, 'onTrace', null)
 
     //普通單
-    let opOrs = await client.restAPI.currentAllOpenOrders({ symbol: SYMBOL })
-    let normalOrders = await opOrs.data()
+    let normalOrders = await callBinaRead(() => client.restAPI.currentAllOpenOrders({ symbol: SYMBOL, recvWindow }), { name: 'openOrders', shape: shapeArr, onTrace })
 
     //algo單(2025-12-09起Binance將條件單TP/SL強制走algoOrder)
-    let opAlgoOrs = await client.restAPI.currentAllAlgoOpenOrders({ symbol: SYMBOL })
-    let algoOrders = await opAlgoOrs.data()
+    let algoOrders = await callBinaRead(() => client.restAPI.currentAllAlgoOpenOrders({ symbol: SYMBOL, recvWindow }), { name: 'openAlgoOrders', shape: shapeArr, onTrace })
 
     //合併。algo單把algoId/clientAlgoId同時mirror到orderId/clientOrderId讓既有下游零改動,
     //但保留原欄位 + 加isAlgo旗標讓需要區分的下游可dispatch

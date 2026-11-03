@@ -1,48 +1,32 @@
 import find from 'lodash-es/find.js'
 import get from 'lodash-es/get.js'
-import map from 'lodash-es/map.js'
-import isbol from 'wsemi/src/isbol.mjs'
+import isestr from 'wsemi/src/isestr.mjs'
 import iseobj from 'wsemi/src/iseobj.mjs'
-import { DerivativesTradingUsdsFutures } from '@binance/derivatives-trading-usds-futures'
+import callBinaRead from './callBinaRead.mjs'
+import { shapeSymbols } from './classifyBinaErr.mjs'
+import getBinaClient from './getBinaClient.mjs'
 
 
+/**
+ * 查商品資訊, 讀取失敗拋BinaOpError(err.execState、err.binance.attempts)
+ *
+ * @param {Object} st 設定物件
+ * @param {String} SYMBOL 商品
+ * @param {Object} [opt={}] forceTest, onTrace
+ * @returns {Promise} resolve商品資訊
+ */
 let opBinaContractQuerySymbolInfor = async(st, SYMBOL, opt = {}) => {
 
-    //params
-    let forceTest = get(opt, 'forceTest', null)
-    let forTestAll = get(st, 'forTestAll', null)
-    let forTest = get(st, 'binance.forTest', null)
-    if (isbol(forceTest)) {
-        forTest = forceTest
+    //check
+    if (!isestr(SYMBOL)) {
+        throw new Error(`invalid SYMBOL: must be a non-empty string`)
     }
-    else if (isbol(forTestAll)) {
-        forTest = forTestAll
-    }
-    else if (!isbol(forTest)) {
-        forTest = true
-    }
-    let keyApiContract = 'apiContract'
-    if (forTest) {
-        keyApiContract = 'apiContractTest'
-    }
-    //basePath 由 settings 決定: forTest=true 用 binance.basePathTest (測試端點); forTest=false 用 binance.basePath (正式端點)
-    let basePath = forTest ? get(st, 'binance.basePathTest', '') : get(st, 'binance.basePath', '')
-    let API_KEY = get(st, `binance.${keyApiContract}.key`, '')
-    let API_SECRET = get(st, `binance.${keyApiContract}.secret`, '')
-    // console.log('API_KEY', API_KEY)
-    // console.log('API_SECRET', API_SECRET)
 
     //client
-    let configurationRestAPI = {
-        apiKey: API_KEY,
-        apiSecret: API_SECRET,
-        basePath,
-    }
-    let client = new DerivativesTradingUsdsFutures({ configurationRestAPI })
+    let { client } = getBinaClient(st, opt, { useSymbol: false })
 
     //exInfo
-    let exInfom = await client.restAPI.exchangeInformation()
-    let exInfo = await exInfom.data()
+    let exInfo = await callBinaRead(() => client.restAPI.exchangeInformation(), { name: 'exchangeInfo', shape: shapeSymbols, onTrace: get(opt, 'onTrace', null) })
     // console.log('exInfo', keys(exInfo))
     // exInfo [
     //   'timezone',
@@ -56,7 +40,6 @@ let opBinaContractQuerySymbolInfor = async(st, SYMBOL, opt = {}) => {
 
     //symbols
     let symbols = get(exInfo, 'symbols', [])
-    console.log('symbols', map(symbols, 'symbol'))
     // symbols [
     //   'BTCUSDT',   'ETHUSDT',   'BCHUSDT',      'XRPUSDT',   'LTCUSDT',
     //   'TRXUSDT',   'ETCUSDT',   'LINKUSDT',     'XLMUSDT',   'ADAUSDT',
@@ -66,7 +49,7 @@ let opBinaContractQuerySymbolInfor = async(st, SYMBOL, opt = {}) => {
     //symb
     let symb = find(symbols, { symbol: SYMBOL })
     if (!iseobj(symb)) {
-        throw new Error(`invalid symb for ${SYMBOL}`)
+        throw new Error(`invalid SYMBOL: must be a listed symbol`)
     }
     // console.log('symb', symb)
     // symb {

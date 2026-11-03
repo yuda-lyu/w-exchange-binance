@@ -1,22 +1,27 @@
 import assert from 'assert'
 import _ from 'lodash-es'
 import w from 'wsemi'
-import getSettings from '../src/getSettings.mjs'
 import ott from '../src/ott.mjs'
 import webina from '../src/WExchangeBinance.mjs'
-import { SYMBOL } from './binaSetup.mjs'
+import { bLive, loadSt, opt } from './tools/binaDemoSetup.mjs'
 
 
-let st = getSettings()
-
-
-//讀取型查詢: 不改變帳戶狀態, 走 apiContractTest. 因價格隨時變動, 只驗「必要欄位存在 + 型別/格式 + 合理範圍」, 不比對絕對值
-//測試一律顯式傳 { forceTest: true } 給 op, 強制走測試金鑰+demo端點, 不論 settings.json 為何
-describe('幣安合約-讀取型查詢 (apiContractTest)', function() {
+//連外測試(明確啟用: BINA_LIVE_TEST=1): 只連測試端點, 驗真實端點之成功路徑與欄位; 錯誤語意由假伺服器涵蓋
+//讀取型查詢不改變帳戶狀態. 因價格隨時變動, 只驗必要欄位存在+型別/格式, 不比對絕對值
+let suite = bLive ? describe : describe.skip
+suite('幣安合約-讀取型查詢 (測試端點, 明確啟用)', function() {
     this.timeout(60000)
 
+    let st = null
+    let SYMBOL = ''
+
+    before(() => {
+        st = loadSt()
+        SYMBOL = st.symbol
+    })
+
     it('querySymbolInfor: 回傳symbol物件含必要欄位', async () => {
-        let r = await webina.opBinaContractQuerySymbolInfor(st, SYMBOL, { forceTest: true })
+        let r = await webina.opBinaContractQuerySymbolInfor(st, SYMBOL, opt)
         assert.strictEqual(r.symbol, SYMBOL, 'symbol須等於設定值')
         assert.ok(_.isArray(r.filters) && r.filters.length > 0, 'filters應為非空陣列')
         assert.ok(_.isNumber(r.pricePrecision), 'pricePrecision應為數字')
@@ -25,7 +30,7 @@ describe('幣安合約-讀取型查詢 (apiContractTest)', function() {
     })
 
     it('queryAccountInfor: 回傳帳戶資訊含餘額欄位', async () => {
-        let r = await webina.opBinaContractQueryAccountInfor(st, { forceTest: true })
+        let r = await webina.opBinaContractQueryAccountInfor(st, opt)
         assert.ok(w.isnum(r.totalWalletBalance), 'totalWalletBalance可轉數字')
         assert.ok(w.isnum(r.availableBalance), 'availableBalance可轉數字')
         assert.ok(_.isArray(r.assets), 'assets應為陣列')
@@ -33,7 +38,7 @@ describe('幣安合約-讀取型查詢 (apiContractTest)', function() {
     })
 
     it('listOrders: 回傳當前未成交單陣列(每筆含必要欄位)', async () => {
-        let r = await webina.opBinaContractListOrders(st, { forceTest: true })
+        let r = await webina.opBinaContractListOrders(st, opt)
         assert.ok(_.isArray(r), '應為陣列')
         for (let o of r) {
             assert.ok(w.isestr(w.cstr(o.orderId)), 'orderId可字串化')
@@ -46,7 +51,7 @@ describe('幣安合約-讀取型查詢 (apiContractTest)', function() {
     it('listOrdersHistory: 區間查詢回傳訂單歷史(含tdid/kind/status, 正規化結構)', async () => {
         let tEnd = ott().format('YYYY-MM-DDTHH:mm:ss')
         let tStart = ott().subtract(3, 'day').format('YYYY-MM-DDTHH:mm:ss')
-        let r = await webina.opBinaContractListOrdersHistory(st, ott, tStart, tEnd, { forceTest: true })
+        let r = await webina.opBinaContractListOrdersHistory(st, ott, tStart, tEnd, opt)
         assert.ok(_.isArray(r), '應為陣列')
         for (let o of r) {
             assert.ok(w.isestr(w.cstr(o.orderId)), 'orderId可字串化')
@@ -60,7 +65,7 @@ describe('幣安合約-讀取型查詢 (apiContractTest)', function() {
     it('listTradesFilled: 區間查詢回傳成交明細(含手續費/realizedPnl)', async () => {
         let tEnd = ott().format('YYYY-MM-DDTHH:mm:ss')
         let tStart = ott().subtract(3, 'day').format('YYYY-MM-DDTHH:mm:ss')
-        let r = await webina.opBinaContractListTradesFilled(st, ott, tStart, tEnd, { forceTest: true })
+        let r = await webina.opBinaContractListTradesFilled(st, ott, tStart, tEnd, opt)
         assert.ok(_.isArray(r), '應為陣列')
         for (let t of r) {
             assert.ok(w.isestr(t.id), 'trade id為字串')

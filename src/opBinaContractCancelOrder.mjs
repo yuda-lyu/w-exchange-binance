@@ -1,60 +1,32 @@
 import get from 'lodash-es/get.js'
-import cint from 'wsemi/src/cint.mjs'
-import isbol from 'wsemi/src/isbol.mjs'
-import isint from 'wsemi/src/isint.mjs'
-import { DerivativesTradingUsdsFutures } from '@binance/derivatives-trading-usds-futures'
+import cancelBinaSingle, { parseCancelTarget } from './cancelBinaSingle.mjs'
+import getBinaClient from './getBinaClient.mjs'
 
 
+/**
+ * 取消普通單: 目標是這張單不再開啟, 已不開啟不是錯誤, 但要告知實際終局
+ *
+ * 回傳state: CANCELED, FILLED, EXPIRED, EXPIRED_IN_MATCH, REJECTED, NOT_FOUND. 判不了或未查清時拋BinaOpError(err.execState='unknown'), 呼叫端不可視為已撤
+ * alreadyClosed只在查得終局時為true; positionChanged為true時部位已變, 呼叫端須判讀
+ *
+ * 觀察回調事件: cancelSend{id,n}, cancelDone{id,state}
+ *
+ * @param {Object} st 設定物件
+ * @param {String|Number|Object} orderId 交易所ID(數字字串或安全整數), 或{ orderId }、{ clientOrderId }
+ * @param {Object} [opt={}] forceTest, onTrace
+ * @returns {Promise} resolve { state, alreadyClosed, positionChanged, executedQty, res }, reject BinaOpError
+ */
 let opBinaContractCancelOrder = async(st, orderId, opt = {}) => {
 
     //check
-    if (!isint(orderId)) {
-        throw new Error(`orderId[${orderId}] is not an integer`)
-    }
-    orderId = cint(orderId)
-
-    //params
-    let forceTest = get(opt, 'forceTest', null)
-    let forTestAll = get(st, 'forTestAll', null)
-    let forTest = get(st, 'binance.forTest', null)
-    if (isbol(forceTest)) {
-        forTest = forceTest
-    }
-    else if (isbol(forTestAll)) {
-        forTest = forTestAll
-    }
-    else if (!isbol(forTest)) {
-        forTest = true
-    }
-    let keyApiContract = 'apiContract'
-    if (forTest) {
-        keyApiContract = 'apiContractTest'
-    }
-    //basePath 由 settings 決定: forTest=true 用 binance.basePathTest (測試端點); forTest=false 用 binance.basePath (正式端點)
-    let basePath = forTest ? get(st, 'binance.basePathTest', '') : get(st, 'binance.basePath', '')
-    let API_KEY = get(st, `binance.${keyApiContract}.key`, '')
-    let API_SECRET = get(st, `binance.${keyApiContract}.secret`, '')
-    let SYMBOL = get(st, 'symbol', '')
-    // console.log('API_KEY', API_KEY)
-    // console.log('API_SECRET', API_SECRET)
-    // console.log('SYMBOL', SYMBOL)
+    let target = parseCancelTarget(orderId, false)
 
     //client
-    let configurationRestAPI = {
-        apiKey: API_KEY,
-        apiSecret: API_SECRET,
-        basePath,
-    }
-    let client = new DerivativesTradingUsdsFutures({ configurationRestAPI })
+    let { client, SYMBOL, recvWindow } = getBinaClient(st, opt)
 
-    //clod
-    let clodr = await client.restAPI.cancelOrder({
-        symbol: SYMBOL,
-        orderId,
-    })
-    let clod = await clodr.data()
-    // console.log('clod', clod)
-    // clod {
+    //cancel
+    return cancelBinaSingle({ client, symbol: SYMBOL, isAlgo: false, target, recvWindow, onTrace: get(opt, 'onTrace', null) })
+    // res {
     //   orderId: 7605276918,
     //   symbol: 'ETHUSDT',
     //   status: 'CANCELED',
@@ -78,8 +50,6 @@ let opBinaContractCancelOrder = async(st, orderId, opt = {}) => {
     //   goodTillDate: 0,
     //   updateTime: 1765024172313
     // }
-
-    return clod
 }
 
 
