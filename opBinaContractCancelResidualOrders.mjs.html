@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    
+    <meta charset="utf-8">
+    <title>opBinaContractCancelResidualOrders.mjs - Documentation</title>
+    
+    
+    <script src="scripts/prettify/prettify.js"></script>
+    <script src="scripts/prettify/lang-css.js"></script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc.css">
+    <script src="scripts/nav.js" defer></script>
+    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body>
+
+<input type="checkbox" id="nav-trigger" class="nav-trigger" />
+<label for="nav-trigger" class="navicon-button x">
+  <div class="navicon"></div>
+</label>
+
+<label for="nav-trigger" class="overlay"></label>
+
+<nav >
+    
+    
+    <h2><a href="index.html">Home</a></h2><h3>Global</h3><ul><li><a href="global.html#callBinaRead">callBinaRead</a></li><li><a href="global.html#cancelBinaAll">cancelBinaAll</a></li><li><a href="global.html#cancelBinaSingle">cancelBinaSingle</a></li><li><a href="global.html#classifyBinaErr">classifyBinaErr</a></li><li><a href="global.html#getBinaClient">getBinaClient</a></li><li><a href="global.html#getBinaSpotClient">getBinaSpotClient</a></li><li><a href="global.html#opBinaContractCancelAlgoOrder">opBinaContractCancelAlgoOrder</a></li><li><a href="global.html#opBinaContractCancelAllAlgoOrder">opBinaContractCancelAllAlgoOrder</a></li><li><a href="global.html#opBinaContractCancelAllOrder">opBinaContractCancelAllOrder</a></li><li><a href="global.html#opBinaContractCancelOrder">opBinaContractCancelOrder</a></li><li><a href="global.html#opBinaContractCancelResidualOrders">opBinaContractCancelResidualOrders</a></li><li><a href="global.html#opBinaContractListOrders">opBinaContractListOrders</a></li><li><a href="global.html#opBinaContractMarket">opBinaContractMarket</a></li><li><a href="global.html#opBinaContractMarketEntry">opBinaContractMarketEntry</a></li><li><a href="global.html#opBinaContractPlaceProtection">opBinaContractPlaceProtection</a></li><li><a href="global.html#opBinaContractQueryAccountInfor">opBinaContractQueryAccountInfor</a></li><li><a href="global.html#opBinaContractQueryOrderByClientId">opBinaContractQueryOrderByClientId</a></li><li><a href="global.html#opBinaContractQueryOrderInfo">opBinaContractQueryOrderInfo</a></li><li><a href="global.html#opBinaContractQueryPositionInfor">opBinaContractQueryPositionInfor</a></li><li><a href="global.html#opBinaContractQuerySymbolInfor">opBinaContractQuerySymbolInfor</a></li><li><a href="global.html#opBinaSpotLimit">opBinaSpotLimit</a></li><li><a href="global.html#opBinaSpotMarket">opBinaSpotMarket</a></li><li><a href="global.html#placeBinaProtect">placeBinaProtect</a></li><li><a href="global.html#reconcileBinaOrder">reconcileBinaOrder</a></li><li><a href="global.html#toBinaOpError">toBinaOpError</a></li></ul>
+    
+</nav>
+
+<div id="main">
+    
+    <h1 class="page-title">opBinaContractCancelResidualOrders.mjs</h1>
+    
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>import filter from 'lodash-es/filter.js'
+import get from 'lodash-es/get.js'
+import groupBy from 'lodash-es/groupBy.js'
+import map from 'lodash-es/map.js'
+import size from 'lodash-es/size.js'
+import cdbl from 'wsemi/src/cdbl.mjs'
+import cstr from 'wsemi/src/cstr.mjs'
+import delay from 'wsemi/src/delay.mjs'
+import getTrace from 'wsemi/src/getTrace.mjs'
+import pmSeries from 'wsemi/src/pmSeries.mjs'
+import { BinaOpError, toBinanceInfo, classifyBinaErr } from './classifyBinaErr.mjs'
+import getBinaClient from './getBinaClient.mjs'
+import opBinaContractCancelAlgoOrder from './opBinaContractCancelAlgoOrder.mjs'
+import opBinaContractCancelOrder from './opBinaContractCancelOrder.mjs'
+import opBinaContractListOrders from './opBinaContractListOrders.mjs'
+import opBinaContractQueryPositionInfor from './opBinaContractQueryPositionInfor.mjs'
+import { readBinaAlgo, readBinaOrder } from './readBinaLeg.mjs'
+import { getPosAmt } from './reconcileBinaOrder.mjs'
+
+
+//進行中之進場, 部位讀取可能落後
+let LEG_MIN_AGE_MS = 10000
+
+
+//部位為0時再讀一次之間隔, 讀到舊0會撤真實止損
+let POS_REREAD_MS = 1000
+
+
+//依字尾解析, 不以第一個底線切分
+let parseLeg = (clientOrderId) => {
+    let m = /^(.+)_(SL|TP)$/.exec(String(clientOrderId))
+    if (m) {
+        return { tdid: m[1], kind: m[2] }
+    }
+    return { tdid: '', kind: '' }
+}
+
+
+let getLegQty = (o) => {
+    return cdbl(o.isAlgo ? get(o, 'quantity', 0) : get(o, 'origQty', 0))
+}
+
+
+//腿之方向與類型須與字尾、positionSide相符: LONG之保護為SELL、SHORT為BUY, SL為STOP類、TP為TAKE_PROFIT類
+let isLegConsistent = (o) => {
+    let type = String(get(o, 'type', ''))
+    let bType = o.kind === 'SL' ? type.startsWith('STOP') : type.startsWith('TAKE_PROFIT')
+    let positionSide = get(o, 'positionSide', '')
+    let side = get(o, 'side', '')
+    let bSide = positionSide === 'LONG' ? side === 'SELL' : (positionSide === 'SHORT' ? side === 'BUY' : true)
+    return bType &amp;&amp; bSide &amp;&amp; getLegQty(o) > 0
+}
+
+
+let getLegTime = (o) => {
+    return Number(o.isAlgo ? get(o, 'createTime', NaN) : get(o, 'time', NaN))
+}
+
+
+/**
+ * 清殘單: 依部位符號、腿量、腿齡與對腳判定, 判不了不撤且回報, 不吞錯
+ *
+ * 判定(同tdid為一組): 腿齡未滿10秒skipped:tooNew; 部位連讀兩次皆0全撤(含兩腳俱在); 兩次不同skipped:positionChanging; 部位反向skipped:reversedPosition; 超過2筆、非一SL一TP或腿之方向類型與字尾不符skipped:anomalous; 該kind腿量合計大於部位skipped:oversized; 一SL一TP不動; 單腳且對腳FINISHED而actualQty足量才撤, 不足、查無、查詢失敗skipped:partnerUnconfirmed, 其他狀態skipped:partnerStatus
+ *
+ * 呼叫端須定期呼叫本操作: 部位正常而判不了之單會留著, 兩輪之間部位已歸0而留著之單仍可能觸發並反向, 間隔越短窗越小; 先列單後查部位仍非原子快照, 腿齡與重讀只降低、不消除競態
+ *
+ * 查部位失敗整批不撤, 拋BinaOpError(err.execState='unknown'); 撤單失敗不拋, 列於failed
+ *
+ * 觀察回調事件: residualDecision{tdid,decision,reason}, 另見callBinaRead、cancelBinaSingle
+ *
+ * @param {Object} st 設定物件
+ * @param {Object} [opt={}] forceTest, onTrace; 全部下傳
+ * @returns {Promise} resolve { cancelled:[{o,state,res}], closedOtherwise:[{o,state,res}], skipped:[{o,reason}], failed:[{o,execState,code}], unprotected:[{positionSide,amt}], underProtected:[{positionSide,kind,legQty,amt}] }; 後兩者依撤單後之剩餘腿計算
+ */
+let opBinaContractCancelResidualOrders = async(st, opt = {}) => {
+
+    let trace = getTrace(opt)
+    let onTrace = get(opt, 'onTrace', null)
+    let { client, SYMBOL, recvWindow } = getBinaClient(st, opt)
+
+    let r = { cancelled: [], closedOtherwise: [], skipped: [], failed: [], unprotected: [], underProtected: [] }
+
+    let decide = (tdid, decision, reason) => {
+        if (trace) {
+            trace('residualDecision', { tdid, decision, reason })
+        }
+    }
+
+    //列單 → 查部位; 查部位失敗整批不撤
+    let orders = await opBinaContractListOrders(st, opt)
+
+    let readPositions = async () => {
+        try {
+            return await opBinaContractQueryPositionInfor(st, opt)
+        }
+        catch (err) {
+            throw new BinaOpError(`opBinaContractCancelResidualOrders failed: position query failed`, {
+                execState: 'unknown',
+                outcome: 'POSITION_UNREAD',
+                binance: err.binance || toBinanceInfo(classifyBinaErr(err)),
+                cause: err,
+            })
+        }
+    }
+    let positions = await readPositions()
+
+    //legs
+    let legs = map(orders, (o) => {
+        return { ...o, ...parseLeg(get(o, 'clientOrderId', '')) }
+    })
+    legs = filter(legs, (o) => {
+        return o.tdid !== ''
+    })
+
+    //group
+    let gs = groupBy(legs, 'tdid')
+    let now = Date.now()
+    let groups = map(gs, (os, tdid) => {
+        return { tdid, os, positionSide: get(os, '0.positionSide', '') }
+    })
+
+    //腿齡未滿者不判定
+    let groupsAged = []
+    for (let g of groups) {
+        let bNew = false
+        for (let o of g.os) {
+            let t = getLegTime(o)
+            if (!Number.isFinite(t) || now - t &lt; LEG_MIN_AGE_MS) {
+                bNew = true
+            }
+        }
+        if (bNew) {
+            decide(g.tdid, 'skip', 'tooNew')
+            for (let o of g.os) {
+                r.skipped.push({ o, reason: 'tooNew' })
+            }
+        }
+        else {
+            groupsAged.push(g)
+        }
+    }
+
+    //部位為0者再讀一次, 兩次皆0才全撤
+    let bAnyFlat = false
+    for (let g of groupsAged) {
+        if (getPosAmt(positions, g.positionSide) === 0) {
+            bAnyFlat = true
+        }
+    }
+    let positions2 = positions
+    if (bAnyFlat) {
+        await delay(POS_REREAD_MS)
+        positions2 = await readPositions()
+    }
+
+    let ordersCancel = []
+
+    //該kind腿量合計, 多tdid共用部位時會超量, 判不了歸屬
+    let getKindSum = (positionSide, kind) => {
+        let s = 0
+        for (let o of legs) {
+            if (o.positionSide === positionSide &amp;&amp; o.kind === kind) {
+                s += getLegQty(o)
+            }
+        }
+        return s
+    }
+
+    let skipGroup = (g, reason) => {
+        decide(g.tdid, 'skip', reason)
+        for (let o of g.os) {
+            r.skipped.push({ o, reason })
+        }
+    }
+
+    for (let g of groupsAged) {
+
+        let { tdid, os, positionSide } = g
+        let amt = getPosAmt(positions, positionSide)
+        let amt2 = getPosAmt(positions2, positionSide)
+        let n = size(os)
+
+        //同一組腿之positionSide須一致
+        if (filter(os, { positionSide }).length !== n) {
+            skipGroup(g, 'anomalous')
+            continue
+        }
+
+        //兩次讀不同: 部位變動中
+        if (amt !== amt2) {
+            skipGroup(g, 'positionChanging')
+            continue
+        }
+
+        //部位為0: 孤單觸發會開反向部位, 全撤
+        if (amt === 0) {
+            decide(tdid, 'cancel', 'flatPosition')
+            ordersCancel.push(...os)
+            continue
+        }
+
+        //部位反向: 自動處理會放大或誤撤
+        if ((positionSide === 'LONG' &amp;&amp; amt &lt; 0) || (positionSide === 'SHORT' &amp;&amp; amt > 0)) {
+            skipGroup(g, 'reversedPosition')
+            continue
+        }
+
+        //超過2筆或兩筆非一SL一TP; 方向或類型與字尾不符者不得算作保護
+        let kinds = map(os, 'kind').sort().join(',')
+        if (n > 2 || (n === 2 &amp;&amp; kinds !== 'SL,TP') || filter(os, isLegConsistent).length !== n) {
+            skipGroup(g, 'anomalous')
+            continue
+        }
+
+        //腿量超過部位
+        let bOversized = false
+        for (let o of os) {
+            if (getKindSum(positionSide, o.kind) > Math.abs(amt) + 1e-9) {
+                bOversized = true
+            }
+        }
+        if (bOversized) {
+            skipGroup(g, 'oversized')
+            continue
+        }
+
+        //正常
+        if (n === 2) {
+            decide(tdid, 'keep', 'normal')
+            continue
+        }
+
+        //單腳: 對腳已足量成交才撤, 撤了就無保護者不撤
+        let o = os[0]
+        let kindPartner = o.kind === 'SL' ? 'TP' : 'SL'
+        let cidPartner = `${tdid}_${kindPartner}`
+        let partner = o.isAlgo
+            ? await readBinaAlgo({ client, symbol: SYMBOL, recvWindow, req: { clientAlgoId: cidPartner }, onTrace })
+            : await readBinaOrder({ client, symbol: SYMBOL, recvWindow, req: { origClientOrderId: cidPartner }, onTrace })
+        if (!partner.found) {
+            skipGroup(g, 'partnerUnconfirmed')
+            continue
+        }
+        let statusPartner = o.isAlgo ? get(partner, 'algoStatus', '') : get(partner, 'status', '')
+        let qtyPartner = cdbl(o.isAlgo ? get(partner, 'actualQty', 0) : get(partner, 'executedQty', 0))
+        let bDone = o.isAlgo ? statusPartner === 'FINISHED' : statusPartner === 'FILLED'
+        if (bDone &amp;&amp; qtyPartner + 1e-9 >= getLegQty(o)) {
+            decide(tdid, 'cancel', 'partnerFinished')
+            ordersCancel.push(o)
+            continue
+        }
+        if (bDone) {
+            skipGroup(g, 'partnerUnconfirmed')
+            continue
+        }
+        skipGroup(g, `partnerStatus:${statusPartner}`)
+
+    }
+
+    //撤單, 一筆失敗不中斷其他筆, 但回報
+    let legsGone = []
+    await pmSeries(ordersCancel, async(o) => {
+        try {
+            let res = o.isAlgo
+                ? await opBinaContractCancelAlgoOrder(st, cstr(o.orderId), opt)
+                : await opBinaContractCancelOrder(st, cstr(o.orderId), opt)
+            //只有CANCELED才算本操作撤到; 已成交、已觸發、查無等另列, 不得當已撤
+            if (res.state === 'CANCELED') {
+                r.cancelled.push({ o, state: res.state, res })
+            }
+            else {
+                r.closedOtherwise.push({ o, state: res.state, res })
+            }
+            legsGone.push(o)
+        }
+        catch (err) {
+            r.failed.push({ o, execState: get(err, 'execState', 'unknown'), code: get(err, 'binance.code', null) })
+        }
+    })
+
+    //撤單後依最新部位與剩餘之腿回報保護覆蓋, 本操作不自動處理: 0筆腿為unprotected; 有腿而某kind合計少於部位為underProtected
+    let legsLeft = filter(legs, (o) => {
+        return !legsGone.includes(o)
+    })
+    for (let p of positions2) {
+        let amt = cdbl(get(p, 'positionAmt', 0))
+        let positionSide = get(p, 'positionSide', '')
+        if (amt === 0) {
+            continue
+        }
+        let legsSide = filter(legsLeft, { positionSide })
+        if (legsSide.length === 0) {
+            r.unprotected.push({ positionSide, amt })
+            continue
+        }
+        for (let kind of ['SL', 'TP']) {
+            let legQty = 0
+            for (let o of filter(legsSide, { kind })) {
+                legQty += getLegQty(o)
+            }
+            if (legQty + 1e-9 &lt; Math.abs(amt)) {
+                r.underProtected.push({ positionSide, kind, legQty, amt })
+            }
+        }
+    }
+
+    return r
+}
+
+
+export default opBinaContractCancelResidualOrders
+</code></pre>
+        </article>
+    </section>
+
+
+
+
+    
+    
+</div>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 4.0.5</a> on Tue Nov 03 2026 21:42:36 GMT+0800 (台北標準時間) using the <a href="https://github.com/clenemt/docdash">docdash</a> theme.
+</footer>
+
+<script>prettyPrint();</script>
+<script src="scripts/polyfill.js"></script>
+<script src="scripts/linenumber.js"></script>
+
+
+
+</body>
+</html>
