@@ -173,15 +173,46 @@ git grep -n "console\.log(" -- src | git grep -v "//"                    # 應�
 
 **測試**:T43(假時鐘驗間隔;五種回調案:未傳、紀錄器、拋錯、回傳 rejection、非函數).
 
+## R-SDK SDK 升版相容
+
+**規則**:`@binance/spot`、`@binance/derivatives-trading-usds-futures`、`@binance/common` 跨版升級後,以下五點須成立,且由測試而非人工判定:①`src/` 內全部 `client.restAPI.<方法>(` 站點於已安裝版本皆存在;②站點無一於已安裝版本標 `@deprecated`(現貨 OCO 用 `orderListOco`,不用已棄用之 `orderOco`;WebSocket API 之 `orderListPlace` 本套件不使用);③合約 `allOrders` 之 `symbol` 自 derivatives 38.0.3 起 SDK 不再檢查必填,由 `getBinaClient` 入口保證非空,每次請求皆帶;④回應只依各站所需欄位判定,對未見過之列舉值(如 `CANCEL_ONLY`)與 `null` 欄位不拋錯、不判確定未執行,成交明細之 `commissionAsset` 為 `null` 時回 `''`;⑤`@binance/common` 2.5.2 之 `NetworkError` 多帶 `transportCode`,分類不變(未知、`source:network`),`transportCode` 刻意不用於判定(單憑傳輸層代碼不足以斷定請求未到達交易所).
+
+**理由**:SDK 之列舉皆為純常數(`ExchangeInfoSymbolStatusEnum` 等),不做執行期驗證,新增列舉值不會使 SDK 拋錯,風險在本套件自己之判定;`symbolStatus` 在 spot 為市場資料端點之請求參數,本套件不呼叫;`executionReport.N` 屬 WebSocket 使用者資料串流,本套件不訂閱.故以假伺服器驗「新值或空值出現在本套件讀取之回應」之情形.
+
+**盤點指令**:
+
+```
+git grep -n "restAPI\." -- src                      # 站點全集(測試以同一正則掃描)
+git grep -n "orderOco(\|orderListPlace(\|getIncomeHistory(" -- src   # 應無
+```
+
+**升版比對作法**(不入包):`npm pack <套件>@<舊版> --pack-destination ./tmp/<夾>` 後 `tar --force-local -xzf` 解到空夾,以 `diff` 比新舊 `dist/index.mjs`(執行碼差異遠小於型別檔),再比本套件站點之 `XxxRequest`、`XxxResponse` 介面本體.
+
+**2026-11-09 升級至 spot 34.0.5、derivatives 39.0.2、common 2.5.2 之逐項結果**:
+
+| 破壞性變更 | 本套件 | 處置 |
+|---|---|---|
+| derivatives 39.0.0 移除 `getIncomeHistory()` 之 `page` | 未用到(無 `getIncomeHistory` 站點) | 無 |
+| derivatives 38.0.3 `allOrders().symbol` 改選填 | 用到(History);入口已保證 symbol | 補測試鎖住「每次請求皆帶 symbol、空 symbol 請求 0 次」 |
+| spot 33.0.0 改 `referencePrice()` 回應(34.0.0 已還原) | 未用到 | 無 |
+| spot `executionReport.N` 改 nullable | 未用到(無 WebSocket);REST 類比為成交明細 `commissionAsset` | 合約成交明細 `null` 正規化為 `''` |
+| spot `orderOco()`、`orderListPlace()` 標 deprecated | 未用到(用 `orderListOco`、`orderListOtoco`,皆非棄用) | 補測試鎖住「站點無棄用方法」 |
+| spot 32.0.x 移除 `NON_REPRESENTABLE`、`END_OF_DAY` 列舉值 | 未用到(src、test 無此字串) | 無 |
+| spot 34.0.5 `symbolStatus` 增 `CANCEL_ONLY` | 未用到(請求參數);商品資訊 `status` 原樣回傳 | 補測試 |
+| common 2.5.2 `NetworkError(msg, transportCode)` | 用到(分類);`retries:0` 不受「耗盡改為 `NetworkError`」影響 | 補測試 |
+| derivatives `modifyOrder` 增 `reduceOnly`、`accountTradeList` 文件改為僅可查近 3 個月(原 6 個月)、`getIncomeHistory` 無關 | 未用到 `modifyOrder`;`accountTradeList` 為交易所端限制,本套件不另設範圍 | 記於經驗檔 |
+
+**測試**:`test/api-binaFakeSdkCompat.test.mjs`(①～⑤各有案;站點與棄用掃描器含自測,棄用掃描另斷言 `orderOco` 確被標為棄用以防掃描器失效).
+
 ## R-TEST 測試分層
 
 | 層 | 檔 | 範圍 | 連外 |
 |---|---|---|---|
 | 單元 | `test/unit-classifyBinaErr.test.mjs`、`test/unit-calcContractQuantity.test.mjs` | 分類表、下單量 | 否 |
-| 假伺服器 | `test/api-binaFake*.test.mjs`、`test/tools/binaFakeServer.mjs`(固定埠 8297) | 全部錯誤語意,決定性 | 否(`test/tools/binaNetGuard.mjs` 於網路層攔非 loopback) |
+| 假伺服器 | `test/api-binaFake*.test.mjs`(含 `api-binaFakeSdkCompat.test.mjs`)、`test/tools/binaFakeServer.mjs`(固定埠 8297) | 全部錯誤語意,決定性 | 否(`test/tools/binaNetGuard.mjs` 於網路層攔非 loopback) |
 | 測試端點 | `test/api-binaDemo*.test.mjs` | 真實端點之成功路徑與契約 | 是;**預設略過,`BINA_LIVE_TEST=1` 才跑**;主機白名單、記憶體內抹除正式金鑰、測前測後確認帳戶已清回 |
 
-`package.json` 之 test 字串不變.假伺服器以 `basePath` 導向,不用 `axios.defaults.baseURL`(方案要擋它).SDK 2.4.5 之 `validateTLSUrl` 未被呼叫,http 可用;升版若啟用,改走本機 https.
+`package.json` 之 test 字串不變.假伺服器以 `basePath` 導向,不用 `axios.defaults.baseURL`(方案要擋它).`@binance/common` 2.4.5 與 2.5.2 之 `validateTLSUrl` 皆未被 REST 路徑呼叫,http 可用;升版若啟用,改走本機 https.
 
 **改動範圍 → 測試檔**:本套件無瀏覽器 e2e;`src/` 任何改動跑全部離線測試.
 

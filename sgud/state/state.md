@@ -17,6 +17,7 @@
 | 殘單判定 | 已做 | R-RESIDUAL | `test/api-binaFakeResidual.test.mjs` |
 | 查詢(QueryOrderInfo、QueryOrderByClientId、History、Trades) | 已做 | R-READ | `test/api-binaFakeRead.test.mjs` |
 | 現貨第一階段 | 已做;未實測 | R-CLIENT、R-ERRCLASS | `test/api-binaFakeSpot.test.mjs` |
+| SDK 升版相容(spot 34.0.5、derivatives 39.0.2、common 2.5.2) | 已做;站點無須改呼叫,僅合約成交明細 `commissionAsset` 之 `null` 正規化為 `''` | R-SDK | `test/api-binaFakeSdkCompat.test.mjs` |
 | 連外測試 | 明確啟用(`BINA_LIVE_TEST=1`) | R-TEST | `test/api-binaDemo*.test.mjs` |
 
 ## 待辦與已知缺口
@@ -48,6 +49,8 @@
 - `timeout` 為閒置型:回應緩慢滴入可超過 `timeout`;SDK 無 abort 接口,刻意不做硬時限.
 - 殘餘風險(測試端點皆反向):止損掛好後、止盈送出前觸發(約 600ms 窗),止盈成孤單;一腳成交後另一腳留到下一次 CancelResidual;其他流程或人工減倉後,數量型保護單超量.
 - 測試帳戶之 `closePosition` 固定超量異常,來源未明;本套件不用它.
+- 合約 `accountTradeList` 依 SDK 39 文件僅可查近 3 個月(原 6 個月),為交易所端限制,本套件不設範圍,超出者由交易所回覆.
+- `@binance/common` 之 `NetworkError.transportCode`(如 `ECONNREFUSED`)刻意不用於判定:單憑傳輸層代碼不足以斷定請求未到達交易所,錯誤分類維持 `NetworkError` 一律未知.
 
 ## 最近一次驗證
 

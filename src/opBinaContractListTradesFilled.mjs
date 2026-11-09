@@ -101,7 +101,7 @@ let opBinaContractListTradesFilled = async(st, ott, timeStart, timeEnd, opt = {}
             qty: cdbl(get(t, 'qty', 0)),
             quoteQty: cdbl(get(t, 'quoteQty', 0)),
             commission: cdbl(get(t, 'commission', 0)),
-            commissionAsset: get(t, 'commissionAsset', ''),
+            commissionAsset: cstr(get(t, 'commissionAsset', '')), //null與缺欄皆回空字串(lodash get之預設值只補undefined)
             realizedPnl: cdbl(get(t, 'realizedPnl', 0)),
             maker: get(t, 'maker', false),
             buyer: get(t, 'buyer', false),

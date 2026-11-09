@@ -103,6 +103,7 @@ await main()
 | QueryOrderInfo | `{ error }` | 每腳 `{ found:true, ... }` 或 `{ found:false, errKind, code, msg }`;可只給 `tdid` | 改判 `found`、`errKind`;`NOT_OBSERVED` 不是未執行 |
 | MarketEntry | 無 ID;SDK 例外 | 帶 ID(`opt.clientOrderId`,未給自產;**給了而格式無效即拋**,不靜默換 ID);`outcome`(`NOT_EXECUTED`、`UNKNOWN`、`PARTIAL_UNKNOWN`、`ID_USED`);`err.state.clientOrderId`;送單前多查部位(讀不到照送,回查判不了未執行) | 平倉前查部位;傳穩定 ID |
 | 錯誤類別 | SDK 類別;三次逾時為無類別 `Error` | 一律 `BinaOpError`,帶 `execState`、`binance`;原錯在 `cause` | 改判 `execState`,勿再比對訊息 |
+| 成交明細之手續費幣別 | `opBinaContractListTradesFilled` 於交易所回 `null` 時原樣回 `null`(僅缺欄時為 `''`) | `commissionAsset` 恆為字串,`null` 與缺欄皆回 `''`(SDK 升版後之空值防護) | 勿以 `null` 判定 |
 | 歷史單 | algo 之 `executedQty` 恆 0;tdid 依第一個 `_` 切分 | algo 之 `executedQty` 取 `actualQty`;依字尾解析 | 檢查有無依賴舊值 |
 | 參數訊息 | 回顯輸入值 | `invalid <名稱>: must be ...`,不回顯值 | 勿比對舊訊息;`uTrade` 等改以有效數字判定(不收 `Infinity`、`'0x10'`) |
 | 設定 | 空 `basePath` 回落正式 | 空值、未設金鑰即拋;`forTest` 配正式端點即拋;`axios.defaults.baseURL` 非空即拋;`CancelAlgoOrder` 另須 `st.symbol` | settings 明設 `basePath`、`basePathTest`;宿主不得設全域 baseURL |

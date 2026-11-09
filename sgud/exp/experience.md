@@ -19,4 +19,5 @@
 - **浮點截位會少保護**:`Math.floor(0.29*100)` 得 28;成交量一律以十進位字串截位.
 - **測試舊單與成功路徑混用**:補掛前置查詢會先吃掉注入序列之第一項,以 filter 限定該腳並先放行前置,不要靠順序碰巧.
 - **外審有效**:程式與測試全綠(含變異前)時,兩位外審仍找出 8 條以上高嚴重度屬實缺陷;金額相關之封裝不要以全綠當完成.
+- **SDK 跨主版號升級先看執行碼差異,不看型別檔**(2026-11-09 spot 32→34、derivatives 37→39、common 2.4.5→2.5.2):`npm pack` 舊版解到空夾(Windows 路徑含 `C:`,`tar` 須加 `--force-local`)後 `diff` 新舊 `dist/index.mjs`——spot 只剩版本號、文件與列舉常數,derivatives 只有 `getIncomeHistory` 之 `page`、`allOrders` 不再斷言 `symbol`、`modifyOrder` 增 `reduceOnly`,common 只有 `NetworkError` 多帶 `transportCode`.列舉皆純常數、無執行期驗證,`CANCEL_ONLY` 不會令 SDK 拋錯,風險只在本套件自己之判定;`symbolStatus` 是 spot 市場資料之請求參數、`executionReport.N` 是 WebSocket 事件,本套件皆未用;棄用者是 `orderOco()`(REST)與 `orderListPlace()`(WebSocket),本套件用之 `orderListOco`、`orderListOtoco` 非棄用.`allOrders` 之 `symbol` 不再由 SDK 把關,空 symbol 之唯一防線是 `getBinaClient` 入口.common 2.5.2 起 `retries>0` 耗盡改拋 `NetworkError`(2.4.5 為無類別 `Error`),本套件 `retries:0` 不受影響;`validateTLSUrl` 仍未被 REST 路徑呼叫.
 - **測試鎖有獨佔者排隊時等待很長**:本輪單次等 40 分;把「全套、修前對照、差異、變異」合成一支腳本一次排隊,比分次排省時間,腳本於取得鎖時才讀當時之程式與測試.
