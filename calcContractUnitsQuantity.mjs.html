@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    
+    <meta charset="utf-8">
+    <title>calcContractUnitsQuantity.mjs - Documentation</title>
+    
+    
+    <script src="scripts/prettify/prettify.js"></script>
+    <script src="scripts/prettify/lang-css.js"></script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc.css">
+    <script src="scripts/nav.js" defer></script>
+    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body>
+
+<input type="checkbox" id="nav-trigger" class="nav-trigger" />
+<label for="nav-trigger" class="navicon-button x">
+  <div class="navicon"></div>
+</label>
+
+<label for="nav-trigger" class="overlay"></label>
+
+<nav >
+    
+    
+    <h2><a href="index.html">Home</a></h2><h3>Global</h3><ul><li><a href="global.html#calcContractUnitsQuantity">calcContractUnitsQuantity</a></li><li><a href="global.html#callBinaRead">callBinaRead</a></li><li><a href="global.html#cancelBinaAll">cancelBinaAll</a></li><li><a href="global.html#cancelBinaSingle">cancelBinaSingle</a></li><li><a href="global.html#checkContractBounds">checkContractBounds</a></li><li><a href="global.html#checkContractMaxNotional">checkContractMaxNotional</a></li><li><a href="global.html#checkContractMaxUnits">checkContractMaxUnits</a></li><li><a href="global.html#checkContractRuleBuffer">checkContractRuleBuffer</a></li><li><a href="global.html#checkContractUnits">checkContractUnits</a></li><li><a href="global.html#classifyBinaErr">classifyBinaErr</a></li><li><a href="global.html#getBinaClient">getBinaClient</a></li><li><a href="global.html#getBinaSpotClient">getBinaSpotClient</a></li><li><a href="global.html#getContractRule">getContractRule</a></li><li><a href="global.html#getContractRuleFromSymbol">getContractRuleFromSymbol</a></li><li><a href="global.html#loadBuildBaseUnitNotional">loadBuildBaseUnitNotional</a></li><li><a href="global.html#loadCalcBaseUnitQuantity">loadCalcBaseUnitQuantity</a></li><li><a href="global.html#opBinaContractCancelAlgoOrder">opBinaContractCancelAlgoOrder</a></li><li><a href="global.html#opBinaContractCancelAllAlgoOrder">opBinaContractCancelAllAlgoOrder</a></li><li><a href="global.html#opBinaContractCancelAllOrder">opBinaContractCancelAllOrder</a></li><li><a href="global.html#opBinaContractCancelOrder">opBinaContractCancelOrder</a></li><li><a href="global.html#opBinaContractCancelResidualOrders">opBinaContractCancelResidualOrders</a></li><li><a href="global.html#opBinaContractListOrders">opBinaContractListOrders</a></li><li><a href="global.html#opBinaContractMarket">opBinaContractMarket</a></li><li><a href="global.html#opBinaContractMarketEntry">opBinaContractMarketEntry</a></li><li><a href="global.html#opBinaContractMarketUnits">opBinaContractMarketUnits</a></li><li><a href="global.html#opBinaContractPlaceProtection">opBinaContractPlaceProtection</a></li><li><a href="global.html#opBinaContractQueryAccountInfor">opBinaContractQueryAccountInfor</a></li><li><a href="global.html#opBinaContractQueryOrderByClientId">opBinaContractQueryOrderByClientId</a></li><li><a href="global.html#opBinaContractQueryOrderInfo">opBinaContractQueryOrderInfo</a></li><li><a href="global.html#opBinaContractQueryPositionInfor">opBinaContractQueryPositionInfor</a></li><li><a href="global.html#opBinaContractQuerySymbolInfor">opBinaContractQuerySymbolInfor</a></li><li><a href="global.html#opBinaSpotLimit">opBinaSpotLimit</a></li><li><a href="global.html#opBinaSpotMarket">opBinaSpotMarket</a></li><li><a href="global.html#placeBinaProtect">placeBinaProtect</a></li><li><a href="global.html#reconcileBinaOrder">reconcileBinaOrder</a></li><li><a href="global.html#toBinaOpError">toBinaOpError</a></li></ul>
+    
+</nav>
+
+<div id="main">
+    
+    <h1 class="page-title">calcContractUnitsQuantity.mjs</h1>
+    
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>import find from 'lodash-es/find.js'
+import get from 'lodash-es/get.js'
+import cdbl from 'wsemi/src/cdbl.mjs'
+import cint from 'wsemi/src/cint.mjs'
+import isearr from 'wsemi/src/isearr.mjs'
+import iseint from 'wsemi/src/iseint.mjs'
+import isenum from 'wsemi/src/isenum.mjs'
+import isestr from 'wsemi/src/isestr.mjs'
+import isobj from 'wsemi/src/isobj.mjs'
+
+
+//以單位數定量: 數量 = units × 基礎單位數量q0(價格), q0為交易規則下之最小合法數量(步長之整數倍、不小於最小數量、名義不低於最小名義價值×(1+buffer)之最小值)
+//q0之計算一律交w-trade-backtest之calcBaseUnitQuantity, 交易規則與緩衝之有效性與可計算性一律交其buildBaseUnitNotional, 本檔不另寫算式與同一判定; 本檔只另做較嚴之檢查(緩衝上限、每單名目與單位數之上限與其下界、規則之maxQty與symbol)
+//兩檔皆於以單位數定量時才動態載入(經src/使用時為已安裝之回測套件之同一份碼; 打包檔亦將兩檔列為external, 於執行期取用已安裝之檔), 未以單位數定量者不依賴它們
+
+
+//名義門檻之緩衝比例之預設與上限(本套件明定並明傳給回測套件之函數, 不依賴其預設)
+export const BUFFER_DEFAULT = 0.1
+export const BUFFER_MAX = 1
+
+
+//一般物件: 原型為Object.prototype或null(類別實例、陣列、Date、Map等皆非); 只供calcContractUnitsQuantity決定是否補預設緩衝, opt之有效性仍由calcBaseUnitQuantity判定
+let isPlainObject = (v) => {
+    if (!isobj(v)) {
+        return false
+    }
+    let p = Object.getPrototypeOf(v)
+    return p === Object.prototype || p === null
+}
+
+
+/**
+ * 載入w-trade-backtest之calcBaseUnitQuantity(依單位數計算數量), 供須在同步段內定量之呼叫端先載入一次再同步使用
+ *
+ * 載入失敗或預設匯出非函數時拋錯(訊息固定, 原錯在cause); 回傳之函數只計算, 不做opBinaContractMarketUnits之任何較嚴之檢查
+ *
+ * @returns {Promise} resolve calcBaseUnitQuantity(price, rule, opt)
+ */
+let loadCalcBaseUnitQuantity = async() => {
+    let mod = null
+    try {
+        mod = await import('w-trade-backtest/src/calcBaseUnitQuantity.mjs')
+    }
+    catch (err) {
+        throw new Error(`calcBaseUnitQuantity unavailable: requires w-trade-backtest with src/calcBaseUnitQuantity.mjs`, { cause: err })
+    }
+    if (typeof mod.default !== 'function') {
+        throw new Error(`calcBaseUnitQuantity unavailable: requires w-trade-backtest with src/calcBaseUnitQuantity.mjs`)
+    }
+    return mod.default
+}
+
+
+/**
+ * 載入w-trade-backtest之buildBaseUnitNotional(交易規則、緩衝、單位數之有效性與可計算性之判定), 供checkContractRuleBuffer之用
+ *
+ * 載入失敗或預設匯出非函數時拋錯(訊息固定, 原錯在cause)
+ *
+ * @returns {Promise} resolve buildBaseUnitNotional(unit, name)
+ */
+let loadBuildBaseUnitNotional = async() => {
+    let mod = null
+    try {
+        mod = await import('w-trade-backtest/src/buildBaseUnitNotional.mjs')
+    }
+    catch (err) {
+        throw new Error(`buildBaseUnitNotional unavailable: requires w-trade-backtest with src/buildBaseUnitNotional.mjs`, { cause: err })
+    }
+    if (typeof mod.default !== 'function') {
+        throw new Error(`buildBaseUnitNotional unavailable: requires w-trade-backtest with src/buildBaseUnitNotional.mjs`)
+    }
+    return mod.default
+}
+
+
+/**
+ * 檢測單位數: 有效整數(數字或數字字串, wsemi之iseint判定, 限安全整數)且大於等於1, 通過即轉為Number後使用; 無效即拋(訊息不回顯值)
+ *
+ * @param {Number|String} units 單位數
+ * @param {String} [name='units'] 訊息所用之名稱
+ * @returns {Number} 轉換後之單位數
+ */
+let checkContractUnits = (units, name = 'units') => {
+    if (!iseint(units, { min: 1 })) {
+        throw new Error(`invalid ${name}: must be a positive integer`)
+    }
+    return cint(units)
+}
+
+
+/**
+ * 檢測每單名目之上限: 必給, 有效數字(數字或數字字串)且大於0, 通過即轉為Number後使用; 未給或無效即拋(不給預設值)
+ *
+ * @param {Number|String} v 每單名目之上限
+ * @param {String} [name='opt.maxNotional'] 訊息所用之名稱
+ * @returns {Number} 轉換後之上限
+ */
+let checkContractMaxNotional = (v, name = 'opt.maxNotional') => {
+    if (!isenum(v, { gt: 0 })) {
+        throw new Error(`invalid ${name}: must be a positive number`)
+    }
+    return cdbl(v)
+}
+
+
+/**
+ * 檢測單位數之上限: undefined或null回null(不檢); 給了須為有效整數(數字或數字字串)且大於等於1, 通過即轉為Number後使用, 無效即拋(不視為未給)
+ *
+ * @param {Number|String} v 單位數之上限
+ * @param {String} [name='opt.maxUnits'] 訊息所用之名稱
+ * @returns {Number|null} 轉換後之上限或null
+ */
+let checkContractMaxUnits = (v, name = 'opt.maxUnits') => {
+    if (v === undefined || v === null) {
+        return null
+    }
+    if (!iseint(v, { min: 1 })) {
+        throw new Error(`invalid ${name}: must be a positive integer`)
+    }
+    return cint(v)
+}
+
+
+/**
+ * 檢測交易規則與緩衝: 有效性與可計算性交w-trade-backtest之buildBaseUnitNotional({ rule, buffer, units }, name)判定(訊息之名稱為name, 如invalid opt.rule.stepSize、invalid opt.buffer、invalid opt: step count k…), 本函數不另寫同一判定;
+ *   通過後轉為Number(K4), 另做較嚴之檢查: buffer不得大於BUFFER_MAX; rule.maxQty(單筆數量上限)與rule.symbol(標的)選填, 給了(非undefined、null)即檢: maxQty為有效數字且大於0, symbol為非空字串
+ * buffer為undefined或null時取BUFFER_DEFAULT並明傳; units須已經checkContractUnits檢測轉換
+ *
+ * @param {Function} buildBaseUnitNotional loadBuildBaseUnitNotional之回傳
+ * @param {Object} rule 交易規則{stepSize,minQty,minNotional,maxQty?,symbol?}, 數值為數字或數字字串
+ * @param {Number|String} buffer 名義門檻之緩衝比例
+ * @param {Number} units 單位數
+ * @param {String} [name='opt'] 訊息所用之名稱(rule與buffer所在之物件)
+ * @returns {Object} { rule, buffer }, rule為轉為Number之新物件(只帶stepSize、minQty、minNotional與有給之maxQty、symbol)
+ */
+let checkContractRuleBuffer = (buildBaseUnitNotional, rule, buffer, units, name = 'opt') => {
+    let b = buffer === undefined || buffer === null ? BUFFER_DEFAULT : buffer
+    buildBaseUnitNotional({ rule, buffer: b, units }, name)
+    let r = {
+        stepSize: cdbl(rule.stepSize),
+        minQty: cdbl(rule.minQty),
+        minNotional: cdbl(rule.minNotional),
+    }
+    b = cdbl(b)
+    if (b > BUFFER_MAX) {
+        throw new Error(`invalid ${name}.buffer: must be a number from 0 to ${BUFFER_MAX}`)
+    }
+    if (rule.maxQty !== undefined &amp;&amp; rule.maxQty !== null) {
+        if (!isenum(rule.maxQty, { gt: 0 })) {
+            throw new Error(`invalid ${name}.rule.maxQty: must be a positive number`)
+        }
+        r.maxQty = cdbl(rule.maxQty)
+    }
+    if (rule.symbol !== undefined &amp;&amp; rule.symbol !== null) {
+        if (!isestr(rule.symbol)) {
+            throw new Error(`invalid ${name}.rule.symbol: must be a non-empty string`)
+        }
+        r.symbol = rule.symbol
+    }
+    return { rule: r, buffer: b }
+}
+
+
+//十進位定點(只供上限之精確比較, 不用於定量): 非負之有限數或定點字串轉{m,s}(值 = m × 10^-s), 以String之最短表示為準
+let decOf = (v) => {
+    let r = /^(\d+)(?:\.(\d+))?(?:e([+-]\d+))?$/.exec(String(v))
+    if (r === null) {
+        throw new Error(`invalid number: must be a non-negative finite decimal`)
+    }
+    let fp = r[2] || ''
+    let ex = r[3] ? parseInt(r[3], 10) : 0
+    let m = BigInt(r[1] + fp)
+    let s = fp.length - ex
+    if (s &lt; 0) {
+        m = m * 10n ** BigInt(-s)
+        s = 0
+    }
+    return { m, s }
+}
+let decMul = (a, b) => ({ m: a.m * b.m, s: a.s + b.s })
+let decAdd1 = (a) => ({ m: a.m + 10n ** BigInt(a.s), s: a.s })
+let decGt = (a, b) => a.m * 10n ** BigInt(b.s) > b.m * 10n ** BigInt(a.s)
+
+
+/**
+ * 與價格無關之上限之下界(送單前): 對任何價格, 每單位之名義 ≥ minNotional×(1+buffer)、數量 ≥ ⌈minQty÷stepSize⌉×stepSize
+ *
+ * units × minNotional × (1 + buffer) > maxNotional ⇒ 任何價格皆超過 ⇒ 拋錯(十進位精確比較, 恰等於者不拒)
+ * 規則帶maxQty時, units × 最小合法數量(以名義門檻不起作用之價格由calcBaseUnitQuantity求得, 不另寫算式) > maxQty ⇒ 同上; 該試算失敗(極端之規則)即拒(fail-closed)
+ * rule、buffer、units、maxNotional須已經checkContractRuleBuffer、checkContractUnits、checkContractMaxNotional檢測轉換
+ *
+ * @param {Function} calcBaseUnitQuantity loadCalcBaseUnitQuantity之回傳
+ * @param {Object} rule checkContractRuleBuffer回傳之rule
+ * @param {Number} buffer checkContractRuleBuffer回傳之buffer
+ * @param {Number} units 單位數
+ * @param {Number} maxNotional 每單名目之上限
+ */
+let checkContractBounds = (calcBaseUnitQuantity, rule, buffer, units, maxNotional) => {
+    let lb = decMul({ m: BigInt(units), s: 0 }, decMul(decOf(rule.minNotional), decAdd1(decOf(buffer))))
+    if (decGt(lb, decOf(maxNotional))) {
+        throw new Error(`invalid units or opt.maxNotional: notional must not exceed opt.maxNotional at any price`)
+    }
+    if (rule.maxQty !== undefined) {
+        let qMin = null
+        try {
+            qMin = calcBaseUnitQuantity(2 * rule.minNotional * (1 + buffer) / rule.stepSize, rule, { buffer, units }).quantityStr
+        }
+        catch (err) {
+            throw new Error(`invalid opt.rule: minimum quantity must be computable`, { cause: err })
+        }
+        if (decGt(decOf(qMin), decOf(rule.maxQty))) {
+            throw new Error(`invalid units or opt.rule.maxQty: quantity must not exceed opt.rule.maxQty at any price`)
+        }
+    }
+}
+
+
+/**
+ * 由設定物件取合約之交易規則, 供以單位數定量之用
+ *
+ * stepSize = 10^-st.digContractQuantity(數量之小數位數), minQty = st.quantityLow(最小數量), minNotional = st.notional(最小名義價值); 三者皆須給, 無效即拋(訊息為st之欄名, 不回顯值)
+ *
+ * @param {Object} st 設定物件, 需含digContractQuantity(有效整數, 0~100)、quantityLow(有效數字且大於0)、notional(有效數字且大於0)
+ * @returns {Object} 回傳交易規則物件{stepSize,minQty,minNotional}, 各為Number
+ */
+let getContractRule = (st) => {
+    let digContractQuantity = get(st, 'digContractQuantity', '')
+    let quantityLow = get(st, 'quantityLow', '')
+    let notional = get(st, 'notional', '')
+    if (!iseint(digContractQuantity, { min: 0, max: 100 })) {
+        throw new Error(`invalid st.digContractQuantity: must be an integer from 0 to 100`)
+    }
+    if (!isenum(quantityLow, { gt: 0 })) {
+        throw new Error(`invalid st.quantityLow: must be a positive number`)
+    }
+    if (!isenum(notional, { gt: 0 })) {
+        throw new Error(`invalid st.notional: must be a positive number`)
+    }
+    return {
+        stepSize: Number(`1e-${cint(digContractQuantity)}`),
+        minQty: cdbl(quantityLow),
+        minNotional: cdbl(notional),
+    }
+}
+
+
+/**
+ * 由交易所之商品資訊(opBinaContractQuerySymbolInfor之回傳)取市價單之交易規則, 供以單位數定量之用
+ *
+ * stepSize、minQty取自filters之MARKET_LOT_SIZE(市價單之數量規則, 不取LOT_SIZE), minNotional取自filters之MIN_NOTIONAL之notional; 缺filter或欄位無效即拋(訊息為filter之欄名, 不回顯值), 不改取其他filter
+ * MARKET_LOT_SIZE之maxQty有給即帶入maxQty(無效即拋); 商品資訊之symbol為非空字串即帶入symbol(opBinaContractMarketUnits據以核對規則之標的與本單之標的相同)
+ *
+ * @param {Object} symb 商品資訊物件, 需含filters陣列
+ * @returns {Object} 回傳交易規則物件{stepSize,minQty,minNotional,maxQty?,symbol?}, 數值各為Number
+ */
+let getContractRuleFromSymbol = (symb) => {
+    let filters = get(symb, 'filters', null)
+    if (!isearr(filters)) {
+        throw new Error(`invalid symb.filters: must be a non-empty array`)
+    }
+    let fLot = find(filters, { filterType: 'MARKET_LOT_SIZE' })
+    let fNotional = find(filters, { filterType: 'MIN_NOTIONAL' })
+    let stepSize = get(fLot, 'stepSize', '')
+    let minQty = get(fLot, 'minQty', '')
+    let maxQty = get(fLot, 'maxQty', null)
+    let minNotional = get(fNotional, 'notional', '')
+    if (!isenum(stepSize, { gt: 0 })) {
+        throw new Error(`invalid symb.filters.MARKET_LOT_SIZE.stepSize: must be a positive number`)
+    }
+    if (!isenum(minQty, { gt: 0 })) {
+        throw new Error(`invalid symb.filters.MARKET_LOT_SIZE.minQty: must be a positive number`)
+    }
+    if (maxQty !== null &amp;&amp; !isenum(maxQty, { gt: 0 })) {
+        throw new Error(`invalid symb.filters.MARKET_LOT_SIZE.maxQty: must be a positive number`)
+    }
+    if (!isenum(minNotional, { gt: 0 })) {
+        throw new Error(`invalid symb.filters.MIN_NOTIONAL.notional: must be a positive number`)
+    }
+    let symbol = get(symb, 'symbol', null)
+    return {
+        stepSize: cdbl(stepSize),
+        minQty: cdbl(minQty),
+        minNotional: cdbl(minNotional),
+        ...(maxQty !== null ? { maxQty: cdbl(maxQty) } : {}),
+        ...(isestr(symbol) ? { symbol } : {}),
+    }
+}
+
+
+/**
+ * 以單位數計算合約下單數量: 數量 = units × 基礎單位數量q0(price)
+ *
+ * q0 = k × stepSize, k = max(⌈minQty/stepSize⌉, ⌈minNotional×(1+buffer)/(price×stepSize)⌉), 即數量為步長之整數倍、不小於最小數量、名義不低於minNotional×(1+buffer)之最小值
+ * 計算與輸入檢測皆由w-trade-backtest之calcBaseUnitQuantity執行(本函數於呼叫時才載入該檔, 載入失敗即拋), 參數、回傳與錯誤訊息同該函數; 唯opt.buffer未給(undefined、null)時明傳BUFFER_DEFAULT
+ * 本函數只計算, 不做opBinaContractMarketUnits之任何較嚴之檢查(每單名目與單位數之上限與其下界、緩衝上限、規則之標的與maxQty);
+ *   以本函數或loadCalcBaseUnitQuantity之回傳自行定量並下單者, 須自做上述檢查(可重用本檔具名匯出之checkContract*)
+ *
+ * @param {Number|String} price 價格, 有效數字且大於0(線上取送單當下之標記價)
+ * @param {Object} rule 交易規則物件{stepSize,minQty,minNotional}, 可由getContractRule或getContractRuleFromSymbol取得
+ * @param {Object} [opt={}] buffer(名義門檻之緩衝比例, 預設BUFFER_DEFAULT)、units(單位數, 正整數, 預設1)
+ * @returns {Promise} resolve物件{k,q0,n0,units,quantity,notional,quantityStr}, quantityStr為小數位數同stepSize之定點字串
+ */
+let calcContractUnitsQuantity = async(price, rule, opt = {}) => {
+    let calcBaseUnitQuantity = await loadCalcBaseUnitQuantity()
+    let o = opt === undefined || opt === null ? {} : opt
+    if (isPlainObject(o) &amp;&amp; (o.buffer === undefined || o.buffer === null)) {
+        o = { ...o, buffer: BUFFER_DEFAULT }
+    }
+    return calcBaseUnitQuantity(price, rule, o)
+}
+
+
+export { loadCalcBaseUnitQuantity, loadBuildBaseUnitNotional, checkContractUnits, checkContractMaxNotional, checkContractMaxUnits, checkContractRuleBuffer, checkContractBounds, getContractRule, getContractRuleFromSymbol }
+export default calcContractUnitsQuantity
+</code></pre>
+        </article>
+    </section>
+
+
+
+
+    
+    
+</div>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 4.0.5</a> on Wed Nov 18 2026 10:14:52 GMT+0800 (台北標準時間) using the <a href="https://github.com/clenemt/docdash">docdash</a> theme.
+</footer>
+
+<script>prettyPrint();</script>
+<script src="scripts/polyfill.js"></script>
+<script src="scripts/linenumber.js"></script>
+
+
+
+</body>
+</html>

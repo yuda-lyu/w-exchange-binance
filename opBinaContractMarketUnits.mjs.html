@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    
+    <meta charset="utf-8">
+    <title>opBinaContractMarketUnits.mjs - Documentation</title>
+    
+    
+    <script src="scripts/prettify/prettify.js"></script>
+    <script src="scripts/prettify/lang-css.js"></script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc.css">
+    <script src="scripts/nav.js" defer></script>
+    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body>
+
+<input type="checkbox" id="nav-trigger" class="nav-trigger" />
+<label for="nav-trigger" class="navicon-button x">
+  <div class="navicon"></div>
+</label>
+
+<label for="nav-trigger" class="overlay"></label>
+
+<nav >
+    
+    
+    <h2><a href="index.html">Home</a></h2><h3>Global</h3><ul><li><a href="global.html#calcContractUnitsQuantity">calcContractUnitsQuantity</a></li><li><a href="global.html#callBinaRead">callBinaRead</a></li><li><a href="global.html#cancelBinaAll">cancelBinaAll</a></li><li><a href="global.html#cancelBinaSingle">cancelBinaSingle</a></li><li><a href="global.html#checkContractBounds">checkContractBounds</a></li><li><a href="global.html#checkContractMaxNotional">checkContractMaxNotional</a></li><li><a href="global.html#checkContractMaxUnits">checkContractMaxUnits</a></li><li><a href="global.html#checkContractRuleBuffer">checkContractRuleBuffer</a></li><li><a href="global.html#checkContractUnits">checkContractUnits</a></li><li><a href="global.html#classifyBinaErr">classifyBinaErr</a></li><li><a href="global.html#getBinaClient">getBinaClient</a></li><li><a href="global.html#getBinaSpotClient">getBinaSpotClient</a></li><li><a href="global.html#getContractRule">getContractRule</a></li><li><a href="global.html#getContractRuleFromSymbol">getContractRuleFromSymbol</a></li><li><a href="global.html#loadBuildBaseUnitNotional">loadBuildBaseUnitNotional</a></li><li><a href="global.html#loadCalcBaseUnitQuantity">loadCalcBaseUnitQuantity</a></li><li><a href="global.html#opBinaContractCancelAlgoOrder">opBinaContractCancelAlgoOrder</a></li><li><a href="global.html#opBinaContractCancelAllAlgoOrder">opBinaContractCancelAllAlgoOrder</a></li><li><a href="global.html#opBinaContractCancelAllOrder">opBinaContractCancelAllOrder</a></li><li><a href="global.html#opBinaContractCancelOrder">opBinaContractCancelOrder</a></li><li><a href="global.html#opBinaContractCancelResidualOrders">opBinaContractCancelResidualOrders</a></li><li><a href="global.html#opBinaContractListOrders">opBinaContractListOrders</a></li><li><a href="global.html#opBinaContractMarket">opBinaContractMarket</a></li><li><a href="global.html#opBinaContractMarketEntry">opBinaContractMarketEntry</a></li><li><a href="global.html#opBinaContractMarketUnits">opBinaContractMarketUnits</a></li><li><a href="global.html#opBinaContractPlaceProtection">opBinaContractPlaceProtection</a></li><li><a href="global.html#opBinaContractQueryAccountInfor">opBinaContractQueryAccountInfor</a></li><li><a href="global.html#opBinaContractQueryOrderByClientId">opBinaContractQueryOrderByClientId</a></li><li><a href="global.html#opBinaContractQueryOrderInfo">opBinaContractQueryOrderInfo</a></li><li><a href="global.html#opBinaContractQueryPositionInfor">opBinaContractQueryPositionInfor</a></li><li><a href="global.html#opBinaContractQuerySymbolInfor">opBinaContractQuerySymbolInfor</a></li><li><a href="global.html#opBinaSpotLimit">opBinaSpotLimit</a></li><li><a href="global.html#opBinaSpotMarket">opBinaSpotMarket</a></li><li><a href="global.html#placeBinaProtect">placeBinaProtect</a></li><li><a href="global.html#reconcileBinaOrder">reconcileBinaOrder</a></li><li><a href="global.html#toBinaOpError">toBinaOpError</a></li></ul>
+    
+</nav>
+
+<div id="main">
+    
+    <h1 class="page-title">opBinaContractMarketUnits.mjs</h1>
+    
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>import { runContractMarket } from './opBinaContractMarket.mjs'
+
+
+/**
+ * 合約市價進場並掛止損止盈, 依單位數定量; 除定量方式外, 流程、失敗之err.outcome、err.execState、err.state與呼叫端義務皆同opBinaContractMarket(錯誤訊息之字首為opBinaContractMarketUnits)
+ *
+ * 進場數量 = units × q0(送單當下之標記價), q0為交易規則下之最小合法數量: q0 = k × stepSize, k = max(⌈minQty/stepSize⌉, ⌈minNotional×(1+buffer)/(標記價×stepSize)⌉), 即步長之整數倍、不小於最小數量、名義不低於minNotional×(1+buffer)之最小值
+ * q0與數量字串由w-trade-backtest之calcBaseUnitQuantity求得, 交易規則與緩衝之有效性與可計算性由其buildBaseUnitNotional判定; 兩檔於本函數檢測輸入時才動態載入(經src/使用或經打包檔使用皆取已安裝之回測套件之檔), 載入失敗即拋且不送任何請求
+ * 交易規則: opt.rule({stepSize,minQty,minNotional,maxQty?,symbol?}, 數值為數字或數字字串, 可由getContractRuleFromSymbol自商品資訊取得); 未給(undefined或null)則由設定物件轉成(getContractRule: stepSize = 10^-st.digContractQuantity、minQty = st.quantityLow、minNotional = st.notional, 三者皆須給)
+ *   規則帶symbol時須等於st.symbol(不符即拋, 不送任何請求); 未帶者照收(呼叫端手給之規則不核標的)
+ *   規則帶maxQty時: units × 最小合法數量(⌈minQty/stepSize⌉ × stepSize, 與價格無關)> maxQty即拋, 不送任何請求; 其後依標記價之數量超過即不送進場單(NOT_ENTERED, err.state.stage為mark, err.state.entry.reason為quantityExceeded)
+ * 上限: opt.maxNotional(每單名目之上限, 必給, 有效數字〔數字或數字字串〕且大於0, 無預設)——
+ *   送任何請求之前: units × minNotional × (1 + buffer)(每單名目之下界, 與價格無關)> maxNotional即拋(十進位精確比較, 恰等於者不拒);
+ *   標記價取得後: 計畫名義(units × q0 × 標記價)超過即不送進場單(NOT_ENTERED, stage為mark, entry.reason為notionalExceeded, 計算值見err.state.unit);
+ *   上限比較之名義以送單當下之標記價計, 實際成交名義(成交價 × 成交量)可能因滑價略高
+ *   opt.maxUnits(選填, 有效整數〔數字或數字字串〕且大於等於1)—— units超過即拋, 不送任何請求
+ * entry.reason為notionalExceeded或quantityExceeded者, 同一價位下必再被拒(非暫時性之失敗), 呼叫端勿自動重試; 讀取標記價失敗(entry.reason為null)才是暫時性
+ * 不使用下單金額與st.uTrade; 止損止盈之數量一律為實際成交量(與opBinaContractMarket相同, 不以當時之價格重算)
+ * units、opt.rule、opt.buffer、opt.maxNotional、opt.maxUnits、規則之可計算性(buildBaseUnitNotional之判定)與上述上限之下界皆於任何API呼叫前(含帳戶設定)檢測, 各鍵給了而無效即拋(影響下單數量, 不視為未給);
+ *   數字類之輸入收數字或數字字串, 通過即轉為Number後使用(定量資訊所記為轉換值);
+ *   依標記價計算失敗(如格數超過安全整數、標記價非正)時為NOT_ENTERED(err.state.stage為mark, err.state.entry.reason為quantityInvalid), 不送進場單
+ * err.state.unit與成功回傳之unit記本次之定量資訊: { units, rule, buffer, maxNotional, maxUnits, k, q0, n0, quantityStr, notional }(未及定量者k以下為null)
+ * 只支援雙向持倉(進場帶positionSide, 同opBinaContractMarket); 所需保證金隨單位數與價格而變, 呼叫端估本金時以units × q0 × 標記價之近期高值計
+ *
+ * 成功回傳之欄位同opBinaContractMarket, 末尾另帶units與unit; 其中uTrade為計畫名義(數量 × 標記價, 2位小數; 部分成交而成功回傳時仍為全量之計畫值, 實際以uTradeReal為準), opBinaContractMarket之uTrade則為輸入之下單金額
+ *
+ * @param {Object} st 設定物件
+ * @param {Function} ott 時間函數
+ * @param {String} mode 'long'或'short'
+ * @param {String} tdid 交易識別字, ^[.A-Z:/a-z0-9-]{1,30}$
+ * @param {Number|String} units 單位數, 有效整數(數字或數字字串)且大於等於1
+ * @param {Number|String} rTakeProfit 止盈比例, 大於0小於0.25
+ * @param {Number|String} rStopLoss 止損比例, 大於0小於0.15
+ * @param {Object} opt maxNotional(必給)、maxUnits、rule(交易規則, 預設由st轉成)、buffer(名義門檻之緩衝比例, 有效數字且介於0與1, 預設BUFFER_DEFAULT即0.1), 其餘同opBinaContractMarket(forceTest, setLever, setCrossMargin, setDualSide, entryDeadlineMs, onTrace)
+ * @returns {Promise} resolve成功結果, reject BinaOpError
+ */
+let opBinaContractMarketUnits = async(st, ott, mode, tdid, units, rTakeProfit, rStopLoss, opt = {}) => {
+    return runContractMarket(true, st, ott, mode, tdid, units, rTakeProfit, rStopLoss, opt)
+}
+
+
+export default opBinaContractMarketUnits
+</code></pre>
+        </article>
+    </section>
+
+
+
+
+    
+    
+</div>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 4.0.5</a> on Wed Nov 18 2026 10:14:52 GMT+0800 (台北標準時間) using the <a href="https://github.com/clenemt/docdash">docdash</a> theme.
+</footer>
+
+<script>prettyPrint();</script>
+<script src="scripts/polyfill.js"></script>
+<script src="scripts/linenumber.js"></script>
+
+
+
+</body>
+</html>
