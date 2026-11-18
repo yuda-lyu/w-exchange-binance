@@ -18,11 +18,11 @@ git grep -n "client\.restAPI\." -- src                                   # 站�
 git grep -n "console\.log(" -- src | git grep -v "//"                    # 應無未註解者(診斷 D2)
 ```
 
-**站點全集**(對外 18 支;請求站點見下):
+**站點全集**(對外 19 支;請求站點見下):
 
 | 操作 | 站點 | recvWindow | 已套 |
 |---|---|---|---|
-| Market | queryOrder(閘)、changeInitialLeverage、changeMarginType、changePositionMode、markPrice(不簽章,刻意不帶)、positionInformationV3、newOrder | 帶 | 已套 |
+| Market、MarketUnits(共用 `runContractMarket`) | queryOrder(閘)、changeInitialLeverage、changeMarginType、changePositionMode、markPrice(不簽章,刻意不帶)、positionInformationV3、newOrder | 帶 | 已套 |
 | placeBinaProtect(Market、PlaceProtection 共用) | newAlgoOrder、currentAllAlgoOpenOrders、queryAlgoOrder、queryOrder、positionInformationV3 | 帶 | 已套 |
 | reconcileBinaOrder(Market、MarketEntry 共用) | queryOrder、positionInformationV3 | 帶 | 已套 |
 | MarketEntry | queryOrder(呼叫端給 ID 才過閘)、positionInformationV3、newOrder | 帶 | 已套 |
@@ -45,9 +45,9 @@ git grep -n "console\.log(" -- src | git grep -v "//"                    # 應�
 
 **規則**:任何請求之前擋下:`basePath` 空或非網址、金鑰空、用到 symbol 者 symbol 空;`forTest` 為 true 而 basePath 之主機為正式端點(主機小寫並去尾隨點,以 SDK 匯出常數比對,另含 `fapi\d*.binance.com`、`api\d*.binance.com`);`axios.defaults.baseURL` 非空(全域設定會蓋過 basePath,`@binance/common/dist/index.mjs:301`).`forTest` 判定順序 `opt.forceTest` > `st.forTestAll` > `st.binance.forTest`,皆非布林預設 true.
 
-**盤點指令**:`git grep -n "getBinaClient\|getBinaSpotClient" -- src`(每支對外操作恰 1 處,Residual 另由子操作檢查).
+**盤點指令**:`git grep -n "getBinaClient\|getBinaSpotClient" -- src`(每支對外操作恰 1 處,Residual 另由子操作檢查;MarketUnits 經 `runContractMarket` 與 Market 共用同 1 處).
 
-**站點全集**:全部 18 支對外操作;`useSymbol:false` 者為 MarketEntry、QuerySymbol、QueryAccount(以參數或無需 symbol),QueryOrderByClientId 於給 `opt.symbol` 時.
+**站點全集**:全部 19 支對外操作(含 MarketUnits);`useSymbol:false` 者為 MarketEntry、QuerySymbol、QueryAccount(以參數或無需 symbol),QueryOrderByClientId 於給 `opt.symbol` 時.
 
 **測試**:`test/api-binaFakeClient.test.mjs` T64(全部操作參數化,請求 0 次)、T42.
 
@@ -102,7 +102,7 @@ git grep -n "console\.log(" -- src | git grep -v "//"                    # 應�
 
 ## R-NORESEND 不重送進場單
 
-**規則**:進場單(Market 之 newOrder、MarketEntry、現貨 BUY、OCO、OTOCO)每次呼叫至多送 1 次:市價單已成交後同 ID 重送會被接受而部位加倍(`live1:50-53`).同 ID 防線:同程序在途 Map(`src/binaInFlight.mjs`,Market 與呼叫端給 ID 之 MarketEntry 共用,鍵為端點與實際進場 ID;狀態未知、部分成交不釋放)、送單前閘(查得任何狀態 `TDID_USED`/`ID_USED`,查詢失敗 `NOT_ENTERED{precheck}`/`NOT_EXECUTED{precheck}`).MarketEntry 之 `opt.clientOrderId` 給了而格式無效即拋(K3 之例外:靜默換 ID 使去重失效).跨程序去重本套件做不到,為呼叫端義務.
+**規則**:進場單(Market 之 newOrder、MarketEntry、現貨 BUY、OCO、OTOCO)每次呼叫至多送 1 次:市價單已成交後同 ID 重送會被接受而部位加倍(`live1:50-53`).同 ID 防線:同程序在途 Map(`src/binaInFlight.mjs`,Market〔含 MarketUnits〕與呼叫端給 ID 之 MarketEntry 共用,鍵為端點與實際進場 ID;狀態未知、部分成交不釋放)、送單前閘(查得任何狀態 `TDID_USED`/`ID_USED`,查詢失敗 `NOT_ENTERED{precheck}`/`NOT_EXECUTED{precheck}`).MarketEntry 之 `opt.clientOrderId` 給了而格式無效即拋(K3 之例外:靜默換 ID 使去重失效).跨程序去重本套件做不到,為呼叫端義務.
 
 **盤點指令**:`git grep -n "restAPI\.newOrder\|orderListOco\|orderListOtoco" -- src`(皆不在迴圈內;站點:Market、MarketEntry、SpotMarket、SpotLimit).
 
@@ -157,11 +157,40 @@ git grep -n "console\.log(" -- src | git grep -v "//"                    # 應�
 
 ## R-INPUT 入口檢查與訊息
 
-**規則**:依 `dspec/輸入參數之檢測機制.md`:檢測先於副作用(V17);訊息 `invalid <名稱>: must be <種類>`,不回顯值(V19、V20);必須參數無效即拋(K2);opt 非預期視為未給(K3,**刻意例外** `opBinaContractMarketEntry` 之 `opt.clientOrderId`:此鍵用於去重,靜默換 ID 使去重失效,無效即拋);ID 視為字串(K6).`tdid` 合約 `^[.A-Z:/a-z0-9-]{1,30}$`,現貨 `^[A-Za-z0-9-]{1,30}$`,不含 `_`.
+**規則**:依 `dspec/輸入參數之檢測機制.md`:檢測先於副作用(V17);訊息 `invalid <名稱>: must be <種類>`,不回顯值(V19、V20);必須參數無效即拋(K2);opt 非預期視為未給(K3,**刻意例外** `opBinaContractMarketEntry` 之 `opt.clientOrderId`:此鍵用於去重,靜默換 ID 使去重失效,無效即拋;`opBinaContractMarketUnits` 之 `opt.rule`、`opt.buffer`、`opt.maxNotional`(必給)、`opt.maxUnits`:影響下單數量或金額(dspec §11 視同安全相關 opt),給了而無效即拋、不改用預設,見 R-UNITS);數字類收數字與數字字串,判定通過即轉型、其後用轉換值(K4、K7;R-UNITS 之 `units`、上限、規則、緩衝已套);ID 視為字串(K6).`tdid` 合約 `^[.A-Z:/a-z0-9-]{1,30}$`,現貨 `^[A-Za-z0-9-]{1,30}$`,不含 `_`.
 
 **盤點指令**:`git grep -n "throw new Error" -- src` 逐筆看訊息無 `${輸入}`.
 
 **刻意不套**:`opt.debug`(規格 K3 之 `debug` 由 §7 opt 解析函數統一實作,該函數未定案,規格為草案).
+
+## R-UNITS 以單位數定量(合約進場)
+
+需求出處:使用端(Gitea #177).
+
+**規則**:
+
+1. **R-UNITS-01 數量**:`opBinaContractMarketUnits` 之進場數量 = `units × q0(送單當下之標記價)`;`q0 = k × stepSize`,`k = max(⌈minQty ÷ stepSize⌉, ⌈minNotional × (1 + buffer) ÷ (標記價 × stepSize)⌉)`(步長之整數倍、不小於最小數量、名義不低於門檻之最小值,`k − 1` 必違反其一);送出之數量字串 = 該計算之 `quantityStr`(小數位數同 `stepSize`).
+2. **R-UNITS-02 單一來源與載入**:`q0` 與數量字串一律由 `w-trade-backtest` 之 `calcBaseUnitQuantity` 求得,交易規則與緩衝之有效性與可計算性一律由其 `buildBaseUnitNotional(unit, 'opt')` 判定,本套件不另寫算式與同一判定.兩檔(`w-trade-backtest/src/calcBaseUnitQuantity.mjs`、`w-trade-backtest/src/buildBaseUnitNotional.mjs`)只在以單位數定量時才動態載入(`loadCalcBaseUnitQuantity`、`loadBuildBaseUnitNotional`,單一載入點 `src/calcContractUnitsQuantity.mjs`);載入失敗或預設匯出非函數即拋 `<函數名> unavailable: requires w-trade-backtest with src/<檔名>`(原錯在 `cause`),且不送任何請求;未以單位數定量之路徑(聚合入口、`opBinaContractMarket`、`calcContractQuantity`)不依賴兩檔.**打包檔**:`toolg/gDistRollup.mjs` 之 `external` 逐字列此兩個路徑,UMD 產物保留惰性之 `import()`、不內聯回測套件之碼,執行期取已安裝之檔(缺檔時同上拋錯、舊入口照常).
+3. **R-UNITS-03 交易規則**:`opt.rule = { stepSize, minQty, minNotional, maxQty?, symbol? }`;未給(`undefined`、`null`)則 `getContractRule(st)`(`stepSize = 10^-st.digContractQuantity`、`minQty = st.quantityLow`、`minNotional = st.notional`,三者皆須給).自商品資訊取規則用 `getContractRuleFromSymbol`:`stepSize`、`minQty`、`maxQty`(有給時)取 `MARKET_LOT_SIZE`(市價單之數量規則),`minNotional` 取 `MIN_NOTIONAL.notional`,另帶 `symbol`;缺或無效即拋、不改取 `LOT_SIZE`.規則帶 `symbol` 者須等於 `st.symbol`(不符即拋、不送任何請求;未帶者照收).src 不寫死任何標的之數值.
+4. **R-UNITS-04 檢測與上限**(皆於任何請求〔含閘、帳戶設定、標記價〕前;訊息 `invalid <名稱>: must be <種類>`,不回顯值;給了而無效即拋、不改用預設〔dspec §11:影響下單數量或金額之 opt〕):
+   - `units`:有效整數(數字或數字字串,wsemi `iseint`,安全整數內)且 ≥ 1,轉為 Number(K4、K7;`'22.00'` 等整數值之數字字串依 §3.1 為有效).
+   - `opt.maxNotional`:**必給**,有效數字(`isenum`)且 > 0,轉為 Number,無預設.`opt.maxUnits`:選填,有效整數且 ≥ 1;`units` 超過即拋.
+   - `opt.rule`、`opt.buffer`:有效性與可計算性交 `buildBaseUnitNotional({ rule, buffer, units }, 'opt')`(訊息 `invalid opt.rule…`、`invalid opt.buffer: must be a non-negative number`、`invalid opt: step count k …`/`… quantity and notional must be finite numbers`;可計算性為回測套件之「以價格 1 試算」);緩衝未給(`undefined`、`null`)取 `BUFFER_DEFAULT`(0.1)並明傳.
+   - 本套件另做之較嚴檢查:緩衝 ≤ `BUFFER_MAX`(1);`maxQty` 有效數字 > 0、`symbol` 非空字串(給了即檢);每單名目之下界 `units × minNotional × (1 + buffer) > maxNotional` 即拋;規則帶 `maxQty` 時最小合法數量之下界 `units × ⌈minQty ÷ stepSize⌉ × stepSize > maxQty` 即拋(最小合法數量由 `calcBaseUnitQuantity` 於名義門檻不起作用之價格求得,該試算失敗即拒);兩下界皆十進位精確比較,恰等於者不拒.
+   - 由 st 轉成之規則與商品資訊之規則:欄位檢測由 `getContractRule`、`getContractRuleFromSymbol` 自做(`invalid st.<欄>`、`invalid symb.filters.<filter>.<欄>`),因 `buildBaseUnitNotional` 之訊息名稱只能為 `<name>.rule.<欄>`;其後仍交 `buildBaseUnitNotional` 判可計算性(訊息名稱為 `opt`).
+   - 依標記價:計算失敗 ⇒ `NOT_ENTERED{mark}`、`entry.reason:'quantityInvalid'`;計畫名義 > `maxNotional` ⇒ `'notionalExceeded'`;數量 > 規則之 `maxQty` ⇒ `'quantityExceeded'`;皆不送進場單(後兩者同一價位下必再被拒,呼叫端勿自動重試);上限以標記價計,成交名義可能因滑價略高.
+5. **R-UNITS-05 出場與其餘**:止損止盈之數量 = 實際成交量(不以掛單時之價格重算);不使用下單金額與 `st.uTrade`;流程、outcome、在途防護(與 Market 共用同一鍵)、請求序列(方法、路徑、參數、次序;數量以外)皆同 Market;`err.state.unit` 與回傳之 `unit` 記本次之定量資訊(`units`、`rule`、`buffer`、`maxNotional`、`maxUnits`、`k`、`q0`、`n0`、`quantityStr`、`notional`;皆為轉換值);回傳同 Market,`uTrade` 為計畫名義(數量 × 標記價,2 位小數;部分成交時仍為全量之計畫值),末尾另帶 `units`、`unit`;只支援雙向持倉(同 Market).
+6. **R-UNITS-06 不影響依金額定量**:`opBinaContractMarket`、`calcContractQuantity`、`checkUTradeNotional` 之行為、回傳、請求與錯誤逐位不變;其錯誤之 `state` 不帶 `unit`.
+
+**盤點指令**:`git grep -n "w-trade-backtest" -- src toolg`(src 只在 `src/calcContractUnitsQuantity.mjs` 之兩個動態 `import()`;toolg 只在 `gDistRollup.mjs` 之 external 兩列,兩者逐字相同);`git grep -n "runContractMarket" -- src`(呼叫端:Market、MarketUnits;內部用,不列入聚合入口).
+
+**站點判準**:動態載入之路徑 ⊆ external 之列(測試以掃描斷言);判定交 `buildBaseUnitNotional`(已套:`opt.rule`、`opt.buffer`、可計算性);刻意不套:`getContractRule`、`getContractRuleFromSymbol` 之欄位檢測(訊息名稱,見 4).
+
+**已知限制**:可計算性依回測套件之「以價格 1 試算」:於價格 1 不可計算而於實際價格可計算之極端規則(如步長小於約 `2.4e-15` 而最小名義價值 20)亦拒,與回測套件一致;由 st 轉成之規則不可計算時訊息名稱為 `opt`;`w-trade-backtest` 若日後於 `package.json` 加 `exports` 而不含 `src/` 之深層路徑,載入即失敗(由 R-UNITS-02 之錯誤揭露);相依為 `^1.1.40`,回測套件之次版或修補版改算法時線上數量隨之(與回測同步為本設計之目的,版本由全庫連動升版管理).
+
+**打包之驗證**(改 `toolg/gDistRollup.mjs`、`src/calcContractUnitsQuantity.mjs` 之載入,或升 rollup／w-package-tools 時):以 `gDistRollup.mjs` 之複本(只改 `fdTar` 至 `./tmp/`)打包,於 `./tmp/` 建擺放(打包檔之複本＋不同狀態之 `node_modules/w-trade-backtest`),以 `require` 載入打包檔各跑一次依金額與依單位數定量:包裝檔(記 `import.meta.url` 且改其結果)⇒ 新入口之結果隨之;缺檔、無預設匯出 ⇒ 新入口拋 unavailable 且請求 0 次、舊入口照常.作法與 2026-11-18 之結果見 `sgud/exp/experience.md`.
+
+**測試**:`test/unit-calcContractUnitsQuantity.test.mjs`(對照表十列、獨立之整數算式〔對照表、邊界價、隨機 2000 組〕、預設緩衝與文件同源、數量字串與既有格式化相同、兩個規則轉換、判定與訊息 = `buildBaseUnitNotional`、緩衝 ≤ 1、`maxQty`／`symbol`、`units`／上限之數字字串與轉換、上限之下界之精確比較、載入之函數即已安裝之檔、動態載入路徑 ⊆ external)、`test/api-binaFakeMarketUnits.test.mjs`(成功路徑多空、數字字串之輸入、兩入口之請求序列相同、對照表十列與隨機標記價之送出數量、每單名目與單位數與單筆數量之上限〔送單前之下界與標記價後之比較〕、規則與標的之綁定、商品資訊之端到端、出場數量、部分成交、`opt.rule` 與 `opt.buffer`、不用 `st.uTrade`、檢測先於請求、計算失敗、帳戶設定後之失敗、時限、在途共用之三種次序)、`test/api-binaFakeNoBaseUnit.test.mjs`(子行程以解析鉤子擋下或包裝兩檔:依金額定量照常、依單位數定量拋明確之錯誤且請求 0 次、預設緩衝明傳)、`test/api-binaFakeMatrix.test.mjs`(MarketUnits 之 15 站 × 28 結果)、`test/api-binaFakeClient.test.mjs` T64(MarketUnits 列入全部操作).
 
 ## R-TRACE 觀察回調
 
@@ -208,8 +237,8 @@ git grep -n "orderOco(\|orderListPlace(\|getIncomeHistory(" -- src   # 應無
 
 | 層 | 檔 | 範圍 | 連外 |
 |---|---|---|---|
-| 單元 | `test/unit-classifyBinaErr.test.mjs`、`test/unit-calcContractQuantity.test.mjs` | 分類表、下單量 | 否 |
-| 假伺服器 | `test/api-binaFake*.test.mjs`(含 `api-binaFakeSdkCompat.test.mjs`)、`test/tools/binaFakeServer.mjs`(固定埠 8297) | 全部錯誤語意,決定性 | 否(`test/tools/binaNetGuard.mjs` 於網路層攔非 loopback) |
+| 單元 | `test/unit-classifyBinaErr.test.mjs`、`test/unit-calcContractQuantity.test.mjs`、`test/unit-calcContractUnitsQuantity.test.mjs` | 分類表、下單量(依金額、依單位數) | 否 |
+| 假伺服器 | `test/api-binaFake*.test.mjs`(含 `api-binaFakeSdkCompat.test.mjs`、`api-binaFakeMarketUnits.test.mjs`、`api-binaFakeNoBaseUnit.test.mjs`〔子行程,`test/tools/noBaseUnitRun.mjs`、`noBaseUnitHook.mjs`〕)、`test/tools/binaFakeServer.mjs`(固定埠 8297) | 全部錯誤語意,決定性 | 否(`test/tools/binaNetGuard.mjs` 於網路層攔非 loopback) |
 | 測試端點 | `test/api-binaDemo*.test.mjs` | 真實端點之成功路徑與契約 | 是;**預設略過,`BINA_LIVE_TEST=1` 才跑**;主機白名單、記憶體內抹除正式金鑰、測前測後確認帳戶已清回 |
 
 `package.json` 之 test 字串不變.假伺服器以 `basePath` 導向,不用 `axios.defaults.baseURL`(方案要擋它).`@binance/common` 2.4.5 與 2.5.2 之 `validateTLSUrl` 皆未被 REST 路徑呼叫,http 可用;升版若啟用,改走本機 https.

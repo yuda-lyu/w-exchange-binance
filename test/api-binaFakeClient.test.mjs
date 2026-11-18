@@ -22,6 +22,7 @@ describe('getBinaClient fail-closed 與端點路由 (本機假伺服器)', funct
     //全部合約操作: 入口皆須fail-closed
     let opsContract = (st, opt) => [
         ['Market', () => webina.opBinaContractMarket(st, ott, 'long', 'tdid-t64', 22, 0.04, 0.02, opt)],
+        ['MarketUnits', () => webina.opBinaContractMarketUnits(st, ott, 'long', 'tdid-t64', 1, 0.04, 0.02, { ...opt, maxNotional: 100 })],
         ['MarketEntry', () => webina.opBinaContractMarketEntry(st, 'ETHUSDT', 'BUY', 'LONG', 0.007, opt)],
         ['PlaceProtection', () => webina.opBinaContractPlaceProtection(st, 'tdid-t64', 'long', 0.007, 2900, 3100, opt)],
         ['QuerySymbol', () => webina.opBinaContractQuerySymbolInfor(st, 'ETHUSDT', opt)],
@@ -100,7 +101,7 @@ describe('getBinaClient fail-closed 與端點路由 (本機假伺服器)', funct
     it('T64 symbol為空: 使用st.symbol之操作入口拋錯, 請求0次', async () => {
         let fx = mkFake()
         fx.st.symbol = ''
-        let names = ['Market', 'PlaceProtection', 'QueryPosition', 'ListOrders', 'CancelAll', 'Residual']
+        let names = ['Market', 'MarketUnits', 'PlaceProtection', 'QueryPosition', 'ListOrders', 'CancelAll', 'Residual']
         for (let [name, fn] of opsContract(fx.st, { forceTest: true }).filter(([n]) => names.includes(n))) {
             await expectRejectNoRequest(fx, name, fn, /invalid st\.symbol/)
         }

@@ -29,7 +29,7 @@
 <nav >
     
     
-    <h2><a href="index.html">Home</a></h2><h3>Global</h3><ul><li><a href="global.html#callBinaRead">callBinaRead</a></li><li><a href="global.html#cancelBinaAll">cancelBinaAll</a></li><li><a href="global.html#cancelBinaSingle">cancelBinaSingle</a></li><li><a href="global.html#classifyBinaErr">classifyBinaErr</a></li><li><a href="global.html#getBinaClient">getBinaClient</a></li><li><a href="global.html#getBinaSpotClient">getBinaSpotClient</a></li><li><a href="global.html#opBinaContractCancelAlgoOrder">opBinaContractCancelAlgoOrder</a></li><li><a href="global.html#opBinaContractCancelAllAlgoOrder">opBinaContractCancelAllAlgoOrder</a></li><li><a href="global.html#opBinaContractCancelAllOrder">opBinaContractCancelAllOrder</a></li><li><a href="global.html#opBinaContractCancelOrder">opBinaContractCancelOrder</a></li><li><a href="global.html#opBinaContractCancelResidualOrders">opBinaContractCancelResidualOrders</a></li><li><a href="global.html#opBinaContractListOrders">opBinaContractListOrders</a></li><li><a href="global.html#opBinaContractMarket">opBinaContractMarket</a></li><li><a href="global.html#opBinaContractMarketEntry">opBinaContractMarketEntry</a></li><li><a href="global.html#opBinaContractPlaceProtection">opBinaContractPlaceProtection</a></li><li><a href="global.html#opBinaContractQueryAccountInfor">opBinaContractQueryAccountInfor</a></li><li><a href="global.html#opBinaContractQueryOrderByClientId">opBinaContractQueryOrderByClientId</a></li><li><a href="global.html#opBinaContractQueryOrderInfo">opBinaContractQueryOrderInfo</a></li><li><a href="global.html#opBinaContractQueryPositionInfor">opBinaContractQueryPositionInfor</a></li><li><a href="global.html#opBinaContractQuerySymbolInfor">opBinaContractQuerySymbolInfor</a></li><li><a href="global.html#opBinaSpotLimit">opBinaSpotLimit</a></li><li><a href="global.html#opBinaSpotMarket">opBinaSpotMarket</a></li><li><a href="global.html#placeBinaProtect">placeBinaProtect</a></li><li><a href="global.html#reconcileBinaOrder">reconcileBinaOrder</a></li><li><a href="global.html#toBinaOpError">toBinaOpError</a></li></ul>
+    <h2><a href="index.html">Home</a></h2><h3>Global</h3><ul><li><a href="global.html#calcContractUnitsQuantity">calcContractUnitsQuantity</a></li><li><a href="global.html#callBinaRead">callBinaRead</a></li><li><a href="global.html#cancelBinaAll">cancelBinaAll</a></li><li><a href="global.html#cancelBinaSingle">cancelBinaSingle</a></li><li><a href="global.html#checkContractBounds">checkContractBounds</a></li><li><a href="global.html#checkContractMaxNotional">checkContractMaxNotional</a></li><li><a href="global.html#checkContractMaxUnits">checkContractMaxUnits</a></li><li><a href="global.html#checkContractRuleBuffer">checkContractRuleBuffer</a></li><li><a href="global.html#checkContractUnits">checkContractUnits</a></li><li><a href="global.html#classifyBinaErr">classifyBinaErr</a></li><li><a href="global.html#getBinaClient">getBinaClient</a></li><li><a href="global.html#getBinaSpotClient">getBinaSpotClient</a></li><li><a href="global.html#getContractRule">getContractRule</a></li><li><a href="global.html#getContractRuleFromSymbol">getContractRuleFromSymbol</a></li><li><a href="global.html#loadBuildBaseUnitNotional">loadBuildBaseUnitNotional</a></li><li><a href="global.html#loadCalcBaseUnitQuantity">loadCalcBaseUnitQuantity</a></li><li><a href="global.html#opBinaContractCancelAlgoOrder">opBinaContractCancelAlgoOrder</a></li><li><a href="global.html#opBinaContractCancelAllAlgoOrder">opBinaContractCancelAllAlgoOrder</a></li><li><a href="global.html#opBinaContractCancelAllOrder">opBinaContractCancelAllOrder</a></li><li><a href="global.html#opBinaContractCancelOrder">opBinaContractCancelOrder</a></li><li><a href="global.html#opBinaContractCancelResidualOrders">opBinaContractCancelResidualOrders</a></li><li><a href="global.html#opBinaContractListOrders">opBinaContractListOrders</a></li><li><a href="global.html#opBinaContractMarket">opBinaContractMarket</a></li><li><a href="global.html#opBinaContractMarketEntry">opBinaContractMarketEntry</a></li><li><a href="global.html#opBinaContractMarketUnits">opBinaContractMarketUnits</a></li><li><a href="global.html#opBinaContractPlaceProtection">opBinaContractPlaceProtection</a></li><li><a href="global.html#opBinaContractQueryAccountInfor">opBinaContractQueryAccountInfor</a></li><li><a href="global.html#opBinaContractQueryOrderByClientId">opBinaContractQueryOrderByClientId</a></li><li><a href="global.html#opBinaContractQueryOrderInfo">opBinaContractQueryOrderInfo</a></li><li><a href="global.html#opBinaContractQueryPositionInfor">opBinaContractQueryPositionInfor</a></li><li><a href="global.html#opBinaContractQuerySymbolInfor">opBinaContractQuerySymbolInfor</a></li><li><a href="global.html#opBinaSpotLimit">opBinaSpotLimit</a></li><li><a href="global.html#opBinaSpotMarket">opBinaSpotMarket</a></li><li><a href="global.html#placeBinaProtect">placeBinaProtect</a></li><li><a href="global.html#reconcileBinaOrder">reconcileBinaOrder</a></li><li><a href="global.html#toBinaOpError">toBinaOpError</a></li></ul>
     
 </nav>
 
@@ -124,6 +124,263 @@
 
     
         <h3 class="subsection-title">Methods</h3>
+
+        
+            
+
+    
+
+    <h4 class="name" id="calcContractUnitsQuantity"><span class="type-signature type-signature-async">(async) </span>calcContractUnitsQuantity<span class="signature">(price, rule, opt<span class="signature-attributes">opt</span>)</span><span class="type-signature"> &rarr; {Promise}</span></h4>
+
+    
+
+
+
+
+<dl class="details">
+    
+    <dt class="tag-description">Description:</dt>
+    <dd class="tag-description"><ul class="dummy"><li><p>以單位數計算合約下單數量: 數量 = units × 基礎單位數量q0(price)</p>
+<p>q0 = k × stepSize, k = max(⌈minQty/stepSize⌉, ⌈minNotional×(1+buffer)/(price×stepSize)⌉), 即數量為步長之整數倍、不小於最小數量、名義不低於minNotional×(1+buffer)之最小值
+計算與輸入檢測皆由w-trade-backtest之calcBaseUnitQuantity執行(本函數於呼叫時才載入該檔, 載入失敗即拋), 參數、回傳與錯誤訊息同該函數; 唯opt.buffer未給(undefined、null)時明傳BUFFER_DEFAULT
+本函數只計算, 不做opBinaContractMarketUnits之任何較嚴之檢查(每單名目與單位數之上限與其下界、緩衝上限、規則之標的與maxQty);
+以本函數或loadCalcBaseUnitQuantity之回傳自行定量並下單者, 須自做上述檢查(可重用本檔具名匯出之checkContract*)</p></li></ul></dd>
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="calcContractUnitsQuantity.mjs.html">calcContractUnitsQuantity.mjs</a>, <a href="calcContractUnitsQuantity.mjs.html#line303">line 303</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+    <h5 class="h5-parameters">Parameters:</h5>
+    
+
+<table class="params">
+    <thead>
+    <tr>
+        
+        <th>Name</th>
+        
+
+        <th>Type</th>
+
+        
+        <th>Attributes</th>
+        
+
+        
+        <th>Default</th>
+        
+
+        <th class="last">Description</th>
+    </tr>
+    </thead>
+
+    <tbody>
+    
+
+        <tr>
+            
+                <td class="name"><code>price</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type">Number</span>
+|
+
+<span class="param-type">String</span>
+
+
+
+            
+            </td>
+
+            
+                <td class="attributes">
+                
+
+                
+
+                
+                </td>
+            
+
+            
+                <td class="default">
+                
+                </td>
+            
+
+            <td class="description last"><p>價格, 有效數字且大於0(線上取送單當下之標記價)</p></td>
+        </tr>
+
+    
+
+        <tr>
+            
+                <td class="name"><code>rule</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type">Object</span>
+
+
+
+            
+            </td>
+
+            
+                <td class="attributes">
+                
+
+                
+
+                
+                </td>
+            
+
+            
+                <td class="default">
+                
+                </td>
+            
+
+            <td class="description last"><p>交易規則物件{stepSize,minQty,minNotional}, 可由getContractRule或getContractRuleFromSymbol取得</p></td>
+        </tr>
+
+    
+
+        <tr>
+            
+                <td class="name"><code>opt</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type">Object</span>
+
+
+
+            
+            </td>
+
+            
+                <td class="attributes">
+                
+                    &lt;optional><br>
+                
+
+                
+
+                
+                </td>
+            
+
+            
+                <td class="default">
+                
+                    <code>{}</code>
+                
+                </td>
+            
+
+            <td class="description last"><p>buffer(名義門檻之緩衝比例, 預設BUFFER_DEFAULT)、units(單位數, 正整數, 預設1)</p></td>
+        </tr>
+
+    
+    </tbody>
+</table>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<h5 class="h5-returns">Returns:</h5>
+
+        
+<div class="param-desc">
+    <p>resolve物件{k,q0,n0,units,quantity,notional,quantityStr}, quantityStr為小數位數同stepSize之定點字串</p>
+</div>
+
+
+
+<dl class="param-type">
+    <dt>
+        Type
+    </dt>
+    <dd>
+        
+<span class="param-type">Promise</span>
+
+
+
+    </dd>
+</dl>
+
+    
+
+
 
         
             
@@ -647,6 +904,1221 @@
     <dd>
         
 <span class="param-type">Promise</span>
+
+
+
+    </dd>
+</dl>
+
+    
+
+
+
+        
+            
+
+    
+
+    <h4 class="name" id="checkContractBounds"><span class="type-signature"></span>checkContractBounds<span class="signature">(calcBaseUnitQuantity, rule, buffer, units, maxNotional)</span><span class="type-signature"></span></h4>
+
+    
+
+
+
+
+<dl class="details">
+    
+    <dt class="tag-description">Description:</dt>
+    <dd class="tag-description"><ul class="dummy"><li><p>與價格無關之上限之下界(送單前): 對任何價格, 每單位之名義 ≥ minNotional×(1+buffer)、數量 ≥ ⌈minQty÷stepSize⌉×stepSize</p>
+<p>units × minNotional × (1 + buffer) &gt; maxNotional ⇒ 任何價格皆超過 ⇒ 拋錯(十進位精確比較, 恰等於者不拒)
+規則帶maxQty時, units × 最小合法數量(以名義門檻不起作用之價格由calcBaseUnitQuantity求得, 不另寫算式) &gt; maxQty ⇒ 同上; 該試算失敗(極端之規則)即拒(fail-closed)
+rule、buffer、units、maxNotional須已經checkContractRuleBuffer、checkContractUnits、checkContractMaxNotional檢測轉換</p></li></ul></dd>
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="calcContractUnitsQuantity.mjs.html">calcContractUnitsQuantity.mjs</a>, <a href="calcContractUnitsQuantity.mjs.html#line198">line 198</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+    <h5 class="h5-parameters">Parameters:</h5>
+    
+
+<table class="params">
+    <thead>
+    <tr>
+        
+        <th>Name</th>
+        
+
+        <th>Type</th>
+
+        
+
+        
+
+        <th class="last">Description</th>
+    </tr>
+    </thead>
+
+    <tbody>
+    
+
+        <tr>
+            
+                <td class="name"><code>calcBaseUnitQuantity</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type">function</span>
+
+
+
+            
+            </td>
+
+            
+
+            
+
+            <td class="description last"><p>loadCalcBaseUnitQuantity之回傳</p></td>
+        </tr>
+
+    
+
+        <tr>
+            
+                <td class="name"><code>rule</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type">Object</span>
+
+
+
+            
+            </td>
+
+            
+
+            
+
+            <td class="description last"><p>checkContractRuleBuffer回傳之rule</p></td>
+        </tr>
+
+    
+
+        <tr>
+            
+                <td class="name"><code>buffer</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type">Number</span>
+
+
+
+            
+            </td>
+
+            
+
+            
+
+            <td class="description last"><p>checkContractRuleBuffer回傳之buffer</p></td>
+        </tr>
+
+    
+
+        <tr>
+            
+                <td class="name"><code>units</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type">Number</span>
+
+
+
+            
+            </td>
+
+            
+
+            
+
+            <td class="description last"><p>單位數</p></td>
+        </tr>
+
+    
+
+        <tr>
+            
+                <td class="name"><code>maxNotional</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type">Number</span>
+
+
+
+            
+            </td>
+
+            
+
+            
+
+            <td class="description last"><p>每單名目之上限</p></td>
+        </tr>
+
+    
+    </tbody>
+</table>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        
+            
+
+    
+
+    <h4 class="name" id="checkContractMaxNotional"><span class="type-signature"></span>checkContractMaxNotional<span class="signature">(v, name<span class="signature-attributes">opt</span>)</span><span class="type-signature"> &rarr; {Number}</span></h4>
+
+    
+
+
+
+
+<dl class="details">
+    
+    <dt class="tag-description">Description:</dt>
+    <dd class="tag-description"><ul class="dummy"><li><p>檢測每單名目之上限: 必給, 有效數字(數字或數字字串)且大於0, 通過即轉為Number後使用; 未給或無效即拋(不給預設值)</p></li></ul></dd>
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="calcContractUnitsQuantity.mjs.html">calcContractUnitsQuantity.mjs</a>, <a href="calcContractUnitsQuantity.mjs.html#line98">line 98</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+    <h5 class="h5-parameters">Parameters:</h5>
+    
+
+<table class="params">
+    <thead>
+    <tr>
+        
+        <th>Name</th>
+        
+
+        <th>Type</th>
+
+        
+        <th>Attributes</th>
+        
+
+        
+        <th>Default</th>
+        
+
+        <th class="last">Description</th>
+    </tr>
+    </thead>
+
+    <tbody>
+    
+
+        <tr>
+            
+                <td class="name"><code>v</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type">Number</span>
+|
+
+<span class="param-type">String</span>
+
+
+
+            
+            </td>
+
+            
+                <td class="attributes">
+                
+
+                
+
+                
+                </td>
+            
+
+            
+                <td class="default">
+                
+                </td>
+            
+
+            <td class="description last"><p>每單名目之上限</p></td>
+        </tr>
+
+    
+
+        <tr>
+            
+                <td class="name"><code>name</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type">String</span>
+
+
+
+            
+            </td>
+
+            
+                <td class="attributes">
+                
+                    &lt;optional><br>
+                
+
+                
+
+                
+                </td>
+            
+
+            
+                <td class="default">
+                
+                    <code>'opt.maxNotional'</code>
+                
+                </td>
+            
+
+            <td class="description last"><p>訊息所用之名稱</p></td>
+        </tr>
+
+    
+    </tbody>
+</table>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<h5 class="h5-returns">Returns:</h5>
+
+        
+<div class="param-desc">
+    <p>轉換後之上限</p>
+</div>
+
+
+
+<dl class="param-type">
+    <dt>
+        Type
+    </dt>
+    <dd>
+        
+<span class="param-type">Number</span>
+
+
+
+    </dd>
+</dl>
+
+    
+
+
+
+        
+            
+
+    
+
+    <h4 class="name" id="checkContractMaxUnits"><span class="type-signature"></span>checkContractMaxUnits<span class="signature">(v, name<span class="signature-attributes">opt</span>)</span><span class="type-signature"> &rarr; {Number|null}</span></h4>
+
+    
+
+
+
+
+<dl class="details">
+    
+    <dt class="tag-description">Description:</dt>
+    <dd class="tag-description"><ul class="dummy"><li><p>檢測單位數之上限: undefined或null回null(不檢); 給了須為有效整數(數字或數字字串)且大於等於1, 通過即轉為Number後使用, 無效即拋(不視為未給)</p></li></ul></dd>
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="calcContractUnitsQuantity.mjs.html">calcContractUnitsQuantity.mjs</a>, <a href="calcContractUnitsQuantity.mjs.html#line113">line 113</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+    <h5 class="h5-parameters">Parameters:</h5>
+    
+
+<table class="params">
+    <thead>
+    <tr>
+        
+        <th>Name</th>
+        
+
+        <th>Type</th>
+
+        
+        <th>Attributes</th>
+        
+
+        
+        <th>Default</th>
+        
+
+        <th class="last">Description</th>
+    </tr>
+    </thead>
+
+    <tbody>
+    
+
+        <tr>
+            
+                <td class="name"><code>v</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type">Number</span>
+|
+
+<span class="param-type">String</span>
+
+
+
+            
+            </td>
+
+            
+                <td class="attributes">
+                
+
+                
+
+                
+                </td>
+            
+
+            
+                <td class="default">
+                
+                </td>
+            
+
+            <td class="description last"><p>單位數之上限</p></td>
+        </tr>
+
+    
+
+        <tr>
+            
+                <td class="name"><code>name</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type">String</span>
+
+
+
+            
+            </td>
+
+            
+                <td class="attributes">
+                
+                    &lt;optional><br>
+                
+
+                
+
+                
+                </td>
+            
+
+            
+                <td class="default">
+                
+                    <code>'opt.maxUnits'</code>
+                
+                </td>
+            
+
+            <td class="description last"><p>訊息所用之名稱</p></td>
+        </tr>
+
+    
+    </tbody>
+</table>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<h5 class="h5-returns">Returns:</h5>
+
+        
+<div class="param-desc">
+    <p>轉換後之上限或null</p>
+</div>
+
+
+
+<dl class="param-type">
+    <dt>
+        Type
+    </dt>
+    <dd>
+        
+<span class="param-type">Number</span>
+|
+
+<span class="param-type">null</span>
+
+
+
+    </dd>
+</dl>
+
+    
+
+
+
+        
+            
+
+    
+
+    <h4 class="name" id="checkContractRuleBuffer"><span class="type-signature"></span>checkContractRuleBuffer<span class="signature">(buildBaseUnitNotional, rule, buffer, units, name<span class="signature-attributes">opt</span>)</span><span class="type-signature"> &rarr; {Object}</span></h4>
+
+    
+
+
+
+
+<dl class="details">
+    
+    <dt class="tag-description">Description:</dt>
+    <dd class="tag-description"><ul class="dummy"><li><p>檢測交易規則與緩衝: 有效性與可計算性交w-trade-backtest之buildBaseUnitNotional({ rule, buffer, units }, name)判定(訊息之名稱為name, 如invalid opt.rule.stepSize、invalid opt.buffer、invalid opt: step count k…), 本函數不另寫同一判定;
+通過後轉為Number(K4), 另做較嚴之檢查: buffer不得大於BUFFER_MAX; rule.maxQty(單筆數量上限)與rule.symbol(標的)選填, 給了(非undefined、null)即檢: maxQty為有效數字且大於0, symbol為非空字串
+buffer為undefined或null時取BUFFER_DEFAULT並明傳; units須已經checkContractUnits檢測轉換</p></li></ul></dd>
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="calcContractUnitsQuantity.mjs.html">calcContractUnitsQuantity.mjs</a>, <a href="calcContractUnitsQuantity.mjs.html#line136">line 136</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+    <h5 class="h5-parameters">Parameters:</h5>
+    
+
+<table class="params">
+    <thead>
+    <tr>
+        
+        <th>Name</th>
+        
+
+        <th>Type</th>
+
+        
+        <th>Attributes</th>
+        
+
+        
+        <th>Default</th>
+        
+
+        <th class="last">Description</th>
+    </tr>
+    </thead>
+
+    <tbody>
+    
+
+        <tr>
+            
+                <td class="name"><code>buildBaseUnitNotional</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type">function</span>
+
+
+
+            
+            </td>
+
+            
+                <td class="attributes">
+                
+
+                
+
+                
+                </td>
+            
+
+            
+                <td class="default">
+                
+                </td>
+            
+
+            <td class="description last"><p>loadBuildBaseUnitNotional之回傳</p></td>
+        </tr>
+
+    
+
+        <tr>
+            
+                <td class="name"><code>rule</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type">Object</span>
+
+
+
+            
+            </td>
+
+            
+                <td class="attributes">
+                
+
+                
+
+                
+                </td>
+            
+
+            
+                <td class="default">
+                
+                </td>
+            
+
+            <td class="description last"><p>交易規則{stepSize,minQty,minNotional,maxQty?,symbol?}, 數值為數字或數字字串</p></td>
+        </tr>
+
+    
+
+        <tr>
+            
+                <td class="name"><code>buffer</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type">Number</span>
+|
+
+<span class="param-type">String</span>
+
+
+
+            
+            </td>
+
+            
+                <td class="attributes">
+                
+
+                
+
+                
+                </td>
+            
+
+            
+                <td class="default">
+                
+                </td>
+            
+
+            <td class="description last"><p>名義門檻之緩衝比例</p></td>
+        </tr>
+
+    
+
+        <tr>
+            
+                <td class="name"><code>units</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type">Number</span>
+
+
+
+            
+            </td>
+
+            
+                <td class="attributes">
+                
+
+                
+
+                
+                </td>
+            
+
+            
+                <td class="default">
+                
+                </td>
+            
+
+            <td class="description last"><p>單位數</p></td>
+        </tr>
+
+    
+
+        <tr>
+            
+                <td class="name"><code>name</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type">String</span>
+
+
+
+            
+            </td>
+
+            
+                <td class="attributes">
+                
+                    &lt;optional><br>
+                
+
+                
+
+                
+                </td>
+            
+
+            
+                <td class="default">
+                
+                    <code>'opt'</code>
+                
+                </td>
+            
+
+            <td class="description last"><p>訊息所用之名稱(rule與buffer所在之物件)</p></td>
+        </tr>
+
+    
+    </tbody>
+</table>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<h5 class="h5-returns">Returns:</h5>
+
+        
+<div class="param-desc">
+    <p>{ rule, buffer }, rule為轉為Number之新物件(只帶stepSize、minQty、minNotional與有給之maxQty、symbol)</p>
+</div>
+
+
+
+<dl class="param-type">
+    <dt>
+        Type
+    </dt>
+    <dd>
+        
+<span class="param-type">Object</span>
+
+
+
+    </dd>
+</dl>
+
+    
+
+
+
+        
+            
+
+    
+
+    <h4 class="name" id="checkContractUnits"><span class="type-signature"></span>checkContractUnits<span class="signature">(units, name<span class="signature-attributes">opt</span>)</span><span class="type-signature"> &rarr; {Number}</span></h4>
+
+    
+
+
+
+
+<dl class="details">
+    
+    <dt class="tag-description">Description:</dt>
+    <dd class="tag-description"><ul class="dummy"><li><p>檢測單位數: 有效整數(數字或數字字串, wsemi之iseint判定, 限安全整數)且大於等於1, 通過即轉為Number後使用; 無效即拋(訊息不回顯值)</p></li></ul></dd>
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="calcContractUnitsQuantity.mjs.html">calcContractUnitsQuantity.mjs</a>, <a href="calcContractUnitsQuantity.mjs.html#line83">line 83</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+    <h5 class="h5-parameters">Parameters:</h5>
+    
+
+<table class="params">
+    <thead>
+    <tr>
+        
+        <th>Name</th>
+        
+
+        <th>Type</th>
+
+        
+        <th>Attributes</th>
+        
+
+        
+        <th>Default</th>
+        
+
+        <th class="last">Description</th>
+    </tr>
+    </thead>
+
+    <tbody>
+    
+
+        <tr>
+            
+                <td class="name"><code>units</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type">Number</span>
+|
+
+<span class="param-type">String</span>
+
+
+
+            
+            </td>
+
+            
+                <td class="attributes">
+                
+
+                
+
+                
+                </td>
+            
+
+            
+                <td class="default">
+                
+                </td>
+            
+
+            <td class="description last"><p>單位數</p></td>
+        </tr>
+
+    
+
+        <tr>
+            
+                <td class="name"><code>name</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type">String</span>
+
+
+
+            
+            </td>
+
+            
+                <td class="attributes">
+                
+                    &lt;optional><br>
+                
+
+                
+
+                
+                </td>
+            
+
+            
+                <td class="default">
+                
+                    <code>'units'</code>
+                
+                </td>
+            
+
+            <td class="description last"><p>訊息所用之名稱</p></td>
+        </tr>
+
+    
+    </tbody>
+</table>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<h5 class="h5-returns">Returns:</h5>
+
+        
+<div class="param-desc">
+    <p>轉換後之單位數</p>
+</div>
+
+
+
+<dl class="param-type">
+    <dt>
+        Type
+    </dt>
+    <dd>
+        
+<span class="param-type">Number</span>
 
 
 
@@ -1276,6 +2748,543 @@ retryRead: 讀取類可否由本套件重試</p></li></ul></dd>
     <dd>
         
 <span class="param-type">Object</span>
+
+
+
+    </dd>
+</dl>
+
+    
+
+
+
+        
+            
+
+    
+
+    <h4 class="name" id="getContractRule"><span class="type-signature"></span>getContractRule<span class="signature">(st)</span><span class="type-signature"> &rarr; {Object}</span></h4>
+
+    
+
+
+
+
+<dl class="details">
+    
+    <dt class="tag-description">Description:</dt>
+    <dd class="tag-description"><ul class="dummy"><li><p>由設定物件取合約之交易規則, 供以單位數定量之用</p>
+<p>stepSize = 10^-st.digContractQuantity(數量之小數位數), minQty = st.quantityLow(最小數量), minNotional = st.notional(最小名義價值); 三者皆須給, 無效即拋(訊息為st之欄名, 不回顯值)</p></li></ul></dd>
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="calcContractUnitsQuantity.mjs.html">calcContractUnitsQuantity.mjs</a>, <a href="calcContractUnitsQuantity.mjs.html#line226">line 226</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+    <h5 class="h5-parameters">Parameters:</h5>
+    
+
+<table class="params">
+    <thead>
+    <tr>
+        
+        <th>Name</th>
+        
+
+        <th>Type</th>
+
+        
+
+        
+
+        <th class="last">Description</th>
+    </tr>
+    </thead>
+
+    <tbody>
+    
+
+        <tr>
+            
+                <td class="name"><code>st</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type">Object</span>
+
+
+
+            
+            </td>
+
+            
+
+            
+
+            <td class="description last"><p>設定物件, 需含digContractQuantity(有效整數, 0~100)、quantityLow(有效數字且大於0)、notional(有效數字且大於0)</p></td>
+        </tr>
+
+    
+    </tbody>
+</table>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<h5 class="h5-returns">Returns:</h5>
+
+        
+<div class="param-desc">
+    <p>回傳交易規則物件{stepSize,minQty,minNotional}, 各為Number</p>
+</div>
+
+
+
+<dl class="param-type">
+    <dt>
+        Type
+    </dt>
+    <dd>
+        
+<span class="param-type">Object</span>
+
+
+
+    </dd>
+</dl>
+
+    
+
+
+
+        
+            
+
+    
+
+    <h4 class="name" id="getContractRuleFromSymbol"><span class="type-signature"></span>getContractRuleFromSymbol<span class="signature">(symb)</span><span class="type-signature"> &rarr; {Object}</span></h4>
+
+    
+
+
+
+
+<dl class="details">
+    
+    <dt class="tag-description">Description:</dt>
+    <dd class="tag-description"><ul class="dummy"><li><p>由交易所之商品資訊(opBinaContractQuerySymbolInfor之回傳)取市價單之交易規則, 供以單位數定量之用</p>
+<p>stepSize、minQty取自filters之MARKET_LOT_SIZE(市價單之數量規則, 不取LOT_SIZE), minNotional取自filters之MIN_NOTIONAL之notional; 缺filter或欄位無效即拋(訊息為filter之欄名, 不回顯值), 不改取其他filter
+MARKET_LOT_SIZE之maxQty有給即帶入maxQty(無效即拋); 商品資訊之symbol為非空字串即帶入symbol(opBinaContractMarketUnits據以核對規則之標的與本單之標的相同)</p></li></ul></dd>
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="calcContractUnitsQuantity.mjs.html">calcContractUnitsQuantity.mjs</a>, <a href="calcContractUnitsQuantity.mjs.html#line256">line 256</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+    <h5 class="h5-parameters">Parameters:</h5>
+    
+
+<table class="params">
+    <thead>
+    <tr>
+        
+        <th>Name</th>
+        
+
+        <th>Type</th>
+
+        
+
+        
+
+        <th class="last">Description</th>
+    </tr>
+    </thead>
+
+    <tbody>
+    
+
+        <tr>
+            
+                <td class="name"><code>symb</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type">Object</span>
+
+
+
+            
+            </td>
+
+            
+
+            
+
+            <td class="description last"><p>商品資訊物件, 需含filters陣列</p></td>
+        </tr>
+
+    
+    </tbody>
+</table>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<h5 class="h5-returns">Returns:</h5>
+
+        
+<div class="param-desc">
+    <p>回傳交易規則物件{stepSize,minQty,minNotional,maxQty?,symbol?}, 數值各為Number</p>
+</div>
+
+
+
+<dl class="param-type">
+    <dt>
+        Type
+    </dt>
+    <dd>
+        
+<span class="param-type">Object</span>
+
+
+
+    </dd>
+</dl>
+
+    
+
+
+
+        
+            
+
+    
+
+    <h4 class="name" id="loadBuildBaseUnitNotional"><span class="type-signature type-signature-async">(async) </span>loadBuildBaseUnitNotional<span class="signature">()</span><span class="type-signature"> &rarr; {Promise}</span></h4>
+
+    
+
+
+
+
+<dl class="details">
+    
+    <dt class="tag-description">Description:</dt>
+    <dd class="tag-description"><ul class="dummy"><li><p>載入w-trade-backtest之buildBaseUnitNotional(交易規則、緩衝、單位數之有效性與可計算性之判定), 供checkContractRuleBuffer之用</p>
+<p>載入失敗或預設匯出非函數時拋錯(訊息固定, 原錯在cause)</p></li></ul></dd>
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="calcContractUnitsQuantity.mjs.html">calcContractUnitsQuantity.mjs</a>, <a href="calcContractUnitsQuantity.mjs.html#line61">line 61</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<h5 class="h5-returns">Returns:</h5>
+
+        
+<div class="param-desc">
+    <p>resolve buildBaseUnitNotional(unit, name)</p>
+</div>
+
+
+
+<dl class="param-type">
+    <dt>
+        Type
+    </dt>
+    <dd>
+        
+<span class="param-type">Promise</span>
+
+
+
+    </dd>
+</dl>
+
+    
+
+
+
+        
+            
+
+    
+
+    <h4 class="name" id="loadCalcBaseUnitQuantity"><span class="type-signature type-signature-async">(async) </span>loadCalcBaseUnitQuantity<span class="signature">()</span><span class="type-signature"> &rarr; {Promise}</span></h4>
+
+    
+
+
+
+
+<dl class="details">
+    
+    <dt class="tag-description">Description:</dt>
+    <dd class="tag-description"><ul class="dummy"><li><p>載入w-trade-backtest之calcBaseUnitQuantity(依單位數計算數量), 供須在同步段內定量之呼叫端先載入一次再同步使用</p>
+<p>載入失敗或預設匯出非函數時拋錯(訊息固定, 原錯在cause); 回傳之函數只計算, 不做opBinaContractMarketUnits之任何較嚴之檢查</p></li></ul></dd>
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="calcContractUnitsQuantity.mjs.html">calcContractUnitsQuantity.mjs</a>, <a href="calcContractUnitsQuantity.mjs.html#line39">line 39</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<h5 class="h5-returns">Returns:</h5>
+
+        
+<div class="param-desc">
+    <p>resolve calcBaseUnitQuantity(price, rule, opt)</p>
+</div>
+
+
+
+<dl class="param-type">
+    <dt>
+        Type
+    </dt>
+    <dd>
+        
+<span class="param-type">Promise</span>
 
 
 
@@ -2697,13 +4706,14 @@ alreadyClosed只在查得終局時為true; positionChanged為true時部位已變
 <p>err.execState: NOT_ENTERED為'notExecuted'(指本次), TDID類與ENTRY_UNKNOWN為'unknown', ENTERED類為'executed'</p>
 <p>呼叫端義務: 呼叫前把tdid與意圖落盤; tdid須全域唯一, 查得0成交終局者再呼叫得TDID_USED, 須換新; 不得以Promise.race包裝本操作後另起新tdid(外層放棄不會中止已送之單)</p>
 <p>成功回傳之quantity為實際成交量, uTradeReal以成交量計, priceStart仍為標記價</p>
-<p>觀察回調事件見callBinaRead、reconcileBinaOrder、placeBinaProtect</p></li></ul></dd>
+<p>觀察回調事件見callBinaRead、reconcileBinaOrder、placeBinaProtect</p>
+<p>本函數依下單金額定量; 依單位數定量(數量 = 單位數 × 交易規則下之最小合法數量)見opBinaContractMarketUnits</p></li></ul></dd>
     
 
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="opBinaContractMarket.mjs.html">opBinaContractMarket.mjs</a>, <a href="opBinaContractMarket.mjs.html#line51">line 51</a>
+        <a href="opBinaContractMarket.mjs.html">opBinaContractMarket.mjs</a>, <a href="opBinaContractMarket.mjs.html#line54">line 54</a>
     </li></ul></dd>
     
 
@@ -3473,6 +5483,359 @@ alreadyClosed只在查得終局時為true; positionChanged為true時部位已變
         
 <div class="param-desc">
     <p>resolve成交單(含clientOrderId、notes), reject BinaOpError</p>
+</div>
+
+
+
+<dl class="param-type">
+    <dt>
+        Type
+    </dt>
+    <dd>
+        
+<span class="param-type">Promise</span>
+
+
+
+    </dd>
+</dl>
+
+    
+
+
+
+        
+            
+
+    
+
+    <h4 class="name" id="opBinaContractMarketUnits"><span class="type-signature type-signature-async">(async) </span>opBinaContractMarketUnits<span class="signature">(st, ott, mode, tdid, units, rTakeProfit, rStopLoss, opt)</span><span class="type-signature"> &rarr; {Promise}</span></h4>
+
+    
+
+
+
+
+<dl class="details">
+    
+    <dt class="tag-description">Description:</dt>
+    <dd class="tag-description"><ul class="dummy"><li><p>合約市價進場並掛止損止盈, 依單位數定量; 除定量方式外, 流程、失敗之err.outcome、err.execState、err.state與呼叫端義務皆同opBinaContractMarket(錯誤訊息之字首為opBinaContractMarketUnits)</p>
+<p>進場數量 = units × q0(送單當下之標記價), q0為交易規則下之最小合法數量: q0 = k × stepSize, k = max(⌈minQty/stepSize⌉, ⌈minNotional×(1+buffer)/(標記價×stepSize)⌉), 即步長之整數倍、不小於最小數量、名義不低於minNotional×(1+buffer)之最小值
+q0與數量字串由w-trade-backtest之calcBaseUnitQuantity求得, 交易規則與緩衝之有效性與可計算性由其buildBaseUnitNotional判定; 兩檔於本函數檢測輸入時才動態載入(經src/使用或經打包檔使用皆取已安裝之回測套件之檔), 載入失敗即拋且不送任何請求
+交易規則: opt.rule({stepSize,minQty,minNotional,maxQty?,symbol?}, 數值為數字或數字字串, 可由getContractRuleFromSymbol自商品資訊取得); 未給(undefined或null)則由設定物件轉成(getContractRule: stepSize = 10^-st.digContractQuantity、minQty = st.quantityLow、minNotional = st.notional, 三者皆須給)
+規則帶symbol時須等於st.symbol(不符即拋, 不送任何請求); 未帶者照收(呼叫端手給之規則不核標的)
+規則帶maxQty時: units × 最小合法數量(⌈minQty/stepSize⌉ × stepSize, 與價格無關)&gt; maxQty即拋, 不送任何請求; 其後依標記價之數量超過即不送進場單(NOT_ENTERED, err.state.stage為mark, err.state.entry.reason為quantityExceeded)
+上限: opt.maxNotional(每單名目之上限, 必給, 有效數字〔數字或數字字串〕且大於0, 無預設)——
+送任何請求之前: units × minNotional × (1 + buffer)(每單名目之下界, 與價格無關)&gt; maxNotional即拋(十進位精確比較, 恰等於者不拒);
+標記價取得後: 計畫名義(units × q0 × 標記價)超過即不送進場單(NOT_ENTERED, stage為mark, entry.reason為notionalExceeded, 計算值見err.state.unit);
+上限比較之名義以送單當下之標記價計, 實際成交名義(成交價 × 成交量)可能因滑價略高
+opt.maxUnits(選填, 有效整數〔數字或數字字串〕且大於等於1)—— units超過即拋, 不送任何請求
+entry.reason為notionalExceeded或quantityExceeded者, 同一價位下必再被拒(非暫時性之失敗), 呼叫端勿自動重試; 讀取標記價失敗(entry.reason為null)才是暫時性
+不使用下單金額與st.uTrade; 止損止盈之數量一律為實際成交量(與opBinaContractMarket相同, 不以當時之價格重算)
+units、opt.rule、opt.buffer、opt.maxNotional、opt.maxUnits、規則之可計算性(buildBaseUnitNotional之判定)與上述上限之下界皆於任何API呼叫前(含帳戶設定)檢測, 各鍵給了而無效即拋(影響下單數量, 不視為未給);
+數字類之輸入收數字或數字字串, 通過即轉為Number後使用(定量資訊所記為轉換值);
+依標記價計算失敗(如格數超過安全整數、標記價非正)時為NOT_ENTERED(err.state.stage為mark, err.state.entry.reason為quantityInvalid), 不送進場單
+err.state.unit與成功回傳之unit記本次之定量資訊: { units, rule, buffer, maxNotional, maxUnits, k, q0, n0, quantityStr, notional }(未及定量者k以下為null)
+只支援雙向持倉(進場帶positionSide, 同opBinaContractMarket); 所需保證金隨單位數與價格而變, 呼叫端估本金時以units × q0 × 標記價之近期高值計</p>
+<p>成功回傳之欄位同opBinaContractMarket, 末尾另帶units與unit; 其中uTrade為計畫名義(數量 × 標記價, 2位小數; 部分成交而成功回傳時仍為全量之計畫值, 實際以uTradeReal為準), opBinaContractMarket之uTrade則為輸入之下單金額</p></li></ul></dd>
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="opBinaContractMarketUnits.mjs.html">opBinaContractMarketUnits.mjs</a>, <a href="opBinaContractMarketUnits.mjs.html#line37">line 37</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+    <h5 class="h5-parameters">Parameters:</h5>
+    
+
+<table class="params">
+    <thead>
+    <tr>
+        
+        <th>Name</th>
+        
+
+        <th>Type</th>
+
+        
+
+        
+
+        <th class="last">Description</th>
+    </tr>
+    </thead>
+
+    <tbody>
+    
+
+        <tr>
+            
+                <td class="name"><code>st</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type">Object</span>
+
+
+
+            
+            </td>
+
+            
+
+            
+
+            <td class="description last"><p>設定物件</p></td>
+        </tr>
+
+    
+
+        <tr>
+            
+                <td class="name"><code>ott</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type">function</span>
+
+
+
+            
+            </td>
+
+            
+
+            
+
+            <td class="description last"><p>時間函數</p></td>
+        </tr>
+
+    
+
+        <tr>
+            
+                <td class="name"><code>mode</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type">String</span>
+
+
+
+            
+            </td>
+
+            
+
+            
+
+            <td class="description last"><p>'long'或'short'</p></td>
+        </tr>
+
+    
+
+        <tr>
+            
+                <td class="name"><code>tdid</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type">String</span>
+
+
+
+            
+            </td>
+
+            
+
+            
+
+            <td class="description last"><p>交易識別字, ^[.A-Z:/a-z0-9-]{1,30}$</p></td>
+        </tr>
+
+    
+
+        <tr>
+            
+                <td class="name"><code>units</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type">Number</span>
+|
+
+<span class="param-type">String</span>
+
+
+
+            
+            </td>
+
+            
+
+            
+
+            <td class="description last"><p>單位數, 有效整數(數字或數字字串)且大於等於1</p></td>
+        </tr>
+
+    
+
+        <tr>
+            
+                <td class="name"><code>rTakeProfit</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type">Number</span>
+|
+
+<span class="param-type">String</span>
+
+
+
+            
+            </td>
+
+            
+
+            
+
+            <td class="description last"><p>止盈比例, 大於0小於0.25</p></td>
+        </tr>
+
+    
+
+        <tr>
+            
+                <td class="name"><code>rStopLoss</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type">Number</span>
+|
+
+<span class="param-type">String</span>
+
+
+
+            
+            </td>
+
+            
+
+            
+
+            <td class="description last"><p>止損比例, 大於0小於0.15</p></td>
+        </tr>
+
+    
+
+        <tr>
+            
+                <td class="name"><code>opt</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type">Object</span>
+
+
+
+            
+            </td>
+
+            
+
+            
+
+            <td class="description last"><p>maxNotional(必給)、maxUnits、rule(交易規則, 預設由st轉成)、buffer(名義門檻之緩衝比例, 有效數字且介於0與1, 預設BUFFER_DEFAULT即0.1), 其餘同opBinaContractMarket(forceTest, setLever, setCrossMargin, setDualSide, entryDeadlineMs, onTrace)</p></td>
+        </tr>
+
+    
+    </tbody>
+</table>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<h5 class="h5-returns">Returns:</h5>
+
+        
+<div class="param-desc">
+    <p>resolve成功結果, reject BinaOpError</p>
 </div>
 
 
@@ -6488,7 +8851,7 @@ err.outcome: BUY_FAILED(買入失敗或未知, err.execState區分), BUY_ZERO_FI
 <br class="clear">
 
 <footer>
-    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 4.0.5</a> on Tue Nov 17 2026 23:41:28 GMT+0800 (台北標準時間) using the <a href="https://github.com/clenemt/docdash">docdash</a> theme.
+    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 4.0.5</a> on Wed Nov 18 2026 10:14:53 GMT+0800 (台北標準時間) using the <a href="https://github.com/clenemt/docdash">docdash</a> theme.
 </footer>
 
 <script>prettyPrint();</script>

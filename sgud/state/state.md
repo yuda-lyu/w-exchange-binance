@@ -13,6 +13,7 @@
 | Market 各階段與 outcome | 已做 | R-NORESEND、R-PROTECT | `test/api-binaFakeMarket.test.mjs` |
 | PlaceProtection | 已做 | R-PROTECT | `test/api-binaFakeProtect.test.mjs` |
 | MarketEntry | 已做 | R-NORESEND | `test/api-binaFakeMarketEntry.test.mjs` |
+| 以單位數定量(MarketUnits、`calcContractUnitsQuantity`、兩個規則轉換、送單前之檢查;每單名目之上限必給;規則與緩衝之判定交回測套件之 `buildBaseUnitNotional`;打包檔以 external 取已安裝之回測套件) | 已做;只經本機假伺服器,正式與測試端點未實測;打包檔之 external 已以 `./tmp/` 之實際打包驗證(2026-11-18),`dist/` 待發布流程重建 | R-UNITS | `test/unit-calcContractUnitsQuantity.test.mjs`、`test/api-binaFakeMarketUnits.test.mjs`、`test/api-binaFakeNoBaseUnit.test.mjs`、`test/api-binaFakeMatrix.test.mjs`(MarketUnits 列)、`test/api-binaFakeClient.test.mjs` T64 |
 | 取消語意 | 已做 | R-CANCEL | `test/api-binaFakeCancel.test.mjs` |
 | 殘單判定 | 已做 | R-RESIDUAL | `test/api-binaFakeResidual.test.mjs` |
 | 查詢(QueryOrderInfo、QueryOrderByClientId、History、Trades) | 已做 | R-READ | `test/api-binaFakeRead.test.mjs` |
@@ -31,6 +32,11 @@
 5. `recvWindow`、時鐘差、`-1021` 兩種訊息.
 6. 延遲尖峰之真實持續時間(定 `BINA_TIMEOUT_MS`,暫定 3000).
 7. `closePosition`(若採用;§9 三現行為甲維持數量型,待正式端點驗證後複議).
+
+### 以單位數定量(R-UNITS)之待辦
+
+- 新入口 `opBinaContractMarketUnits` 只經本機假伺服器;測試端點與正式端點未實測(連外測試未擴及新入口).
+- `dist/` 由發布流程重建後,以 R-UNITS〈打包之驗證〉之作法抽驗一次(打包檔取已安裝之回測套件、缺檔即拋).
 
 ### 現貨第二階段(未做;需現貨測試網金鑰與實測)
 
@@ -54,4 +60,6 @@
 
 ## 最近一次驗證
 
-2026-11-03 bf297:離線 283 案全綠(unit＋假伺服器,含 53 站 × 28 結果矩陣);變異 92 條擊殺 91、存活 1 條為等價變異(M34);外審 A、B 各一輪,屬實者已修,C 類額度用盡略過.**連外測試(`test/api-binaDemo*.test.mjs`)尚未跑**:測試鎖未取得,成功回應欄位之嚴格比對(`shapePlaced`、`shapeOrderQuery`、`shapePositions`、`shapeCancel`)與 `httpsAgent keepAlive:false` 未經真實端點驗證,發布前須跑.尚未發布,版本未變(1.0.33).`dist/` 未重建(發布流程自動產製);暫存試打包 UMD 成功,18 支匯出齊全.
+2026-11-18 Gitea #177(以單位數定量;基準 1.0.48,版號未改):離線全套 336 通過、18 略過(連外)、0 失敗(1.0.48 為 294 通過,原案皆照過);新測試修前 50 紅;變異 68 項全紅;依金額定量之前後對拍 0 處不同;`./tmp/` 之實際打包驗證打包檔取已安裝之 `w-trade-backtest`.連外測試未跑(安全界線).
+
+前次(2026-11-03 bf297):離線 283 案全綠(unit＋假伺服器,含 53 站 × 28 結果矩陣);變異 92 條擊殺 91、存活 1 條為等價變異(M34);外審 A、B 各一輪,屬實者已修,C 類額度用盡略過.**連外測試(`test/api-binaDemo*.test.mjs`)尚未跑**:測試鎖未取得,成功回應欄位之嚴格比對(`shapePlaced`、`shapeOrderQuery`、`shapePositions`、`shapeCancel`)與 `httpsAgent keepAlive:false` 未經真實端點驗證,發布前須跑.尚未發布,版本未變(1.0.33).`dist/` 未重建(發布流程自動產製);暫存試打包 UMD 成功,18 支匯出齊全.

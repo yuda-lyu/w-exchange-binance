@@ -1,6 +1,7 @@
 import opBinaSpotMarket from './opBinaSpotMarket.mjs'
 import opBinaSpotLimit from './opBinaSpotLimit.mjs'
 import opBinaContractMarket from './opBinaContractMarket.mjs'
+import opBinaContractMarketUnits from './opBinaContractMarketUnits.mjs'
 import opBinaContractMarketEntry from './opBinaContractMarketEntry.mjs'
 import opBinaContractPlaceProtection from './opBinaContractPlaceProtection.mjs'
 import opBinaContractQuerySymbolInfor from './opBinaContractQuerySymbolInfor.mjs'
@@ -26,6 +27,7 @@ let WExchangeBinance = {
 
     //合約下單
     opBinaContractMarket,
+    opBinaContractMarketUnits,
     opBinaContractMarketEntry,
     opBinaContractPlaceProtection,
 

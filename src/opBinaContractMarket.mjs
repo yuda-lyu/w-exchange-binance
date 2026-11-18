@@ -8,6 +8,7 @@ import isfun from 'wsemi/src/isfun.mjs'
 import isp0int from 'wsemi/src/isp0int.mjs'
 import binaInFlight from './binaInFlight.mjs'
 import calcContractQuantity, { checkUTradeNotional } from './calcContractQuantity.mjs'
+import { checkContractBounds, checkContractMaxNotional, checkContractMaxUnits, checkContractRuleBuffer, checkContractUnits, getContractRule, loadBuildBaseUnitNotional, loadCalcBaseUnitQuantity } from './calcContractUnitsQuantity.mjs'
 import callBinaRead from './callBinaRead.mjs'
 import { BinaOpError, classifyBinaErr, sendBina, shapeCode200, shapeEntry, shapeLeverage, shapeMark, shapePositions, toBinanceInfo } from './classifyBinaErr.mjs'
 import getBinaClient from './getBinaClient.mjs'
@@ -38,6 +39,8 @@ let REG_TDID = /^[.A-Z:/a-z0-9-]{1,30}$/
  *
  * 觀察回調事件見callBinaRead、reconcileBinaOrder、placeBinaProtect
  *
+ * 本函數依下單金額定量; 依單位數定量(數量 = 單位數 × 交易規則下之最小合法數量)見opBinaContractMarketUnits
+ *
  * @param {Object} st 設定物件
  * @param {Function} ott 時間函數
  * @param {String} mode 'long'或'short'
@@ -49,8 +52,16 @@ let REG_TDID = /^[.A-Z:/a-z0-9-]{1,30}$/
  * @returns {Promise} resolve成功結果, reject BinaOpError
  */
 let opBinaContractMarket = async(st, ott, mode, tdid, uTrade, rTakeProfit, rStopLoss, opt = {}) => {
+    return runContractMarket(false, st, ott, mode, tdid, uTrade, rTakeProfit, rStopLoss, opt)
+}
+
+
+//合約市價進場之本體, 供opBinaContractMarket(依金額定量, byUnits為false, amount為uTrade)與opBinaContractMarketUnits(依單位數定量, byUnits為true, amount為units)共用
+//內部用: 不列入聚合入口、不入文件, 介面不保證相容
+let runContractMarket = async(byUnits, st, ott, mode, tdid, amount, rTakeProfit, rStopLoss, opt = {}) => {
 
     let tStart = performance.now()
+    let name = byUnits ? 'opBinaContractMarketUnits' : 'opBinaContractMarket'
 
     //check ott
     if (!isfun(ott)) {
@@ -67,20 +78,28 @@ let opBinaContractMarket = async(st, ott, mode, tdid, uTrade, rTakeProfit, rStop
         throw new Error(`invalid tdid: must be a string of 1 to 30 characters from A-Z a-z 0-9 . : / -`)
     }
 
-    //check uTrade
-    let uTradeDef = get(st, 'uTrade', '')
+    //check uTrade(依金額定量)或units(依單位數定量, 不使用uTrade與st.uTrade)
+    let uTrade = null
+    let units = null
     let notional = get(st, 'notional', '') //最小名義價值(交易所MIN_NOTIONAL), 未設定則不檢不補量
-    if (!isenum(uTrade)) {
-        throw new Error(`invalid uTrade: must be a valid number`)
+    if (byUnits) {
+        units = checkContractUnits(amount, 'units')
     }
-    uTrade = cdbl(uTrade)
-    if (uTrade < cdbl(uTradeDef)) {
-        throw new Error(`invalid uTrade: must not be less than st.uTrade`)
-    }
-    uTrade = dig(uTrade, 2)
+    else {
+        uTrade = amount
+        let uTradeDef = get(st, 'uTrade', '')
+        if (!isenum(uTrade)) {
+            throw new Error(`invalid uTrade: must be a valid number`)
+        }
+        uTrade = cdbl(uTrade)
+        if (uTrade < cdbl(uTradeDef)) {
+            throw new Error(`invalid uTrade: must not be less than st.uTrade`)
+        }
+        uTrade = dig(uTrade, 2)
 
-    //check notional, uTrade須不低於最小名義價值, 於任何API呼叫前先檢
-    checkUTradeNotional(uTrade, notional)
+        //check notional, uTrade須不低於最小名義價值, 於任何API呼叫前先檢
+        checkUTradeNotional(uTrade, notional)
+    }
 
     //check rTakeProfit
     if (!isenum(rTakeProfit) || cdbl(rTakeProfit) <= 0 || cdbl(rTakeProfit) >= 0.25) {
@@ -101,8 +120,27 @@ let opBinaContractMarket = async(st, ott, mode, tdid, uTrade, rTakeProfit, rStop
     if (!isp0int(digPrice)) {
         throw new Error(`invalid st.digPrice: must be a non-negative integer`)
     }
-    if (!isp0int(digContractQuantity)) {
+    if (!byUnits && !isp0int(digContractQuantity)) {
         throw new Error(`invalid st.digContractQuantity: must be a non-negative integer`)
+    }
+
+    //依單位數定量: 每單名目之上限(opt.maxNotional, 必給)、單位數之上限(opt.maxUnits)、交易規則(opt.rule, 未給則由st轉成)、緩衝(opt.buffer)與回測套件之兩函數, 皆於任何API呼叫前檢測與載入;
+    //  各鍵給了而無效即拋(影響下單數量, 不視為未給); 規則與緩衝之有效性與可計算性交buildBaseUnitNotional判定(checkContractRuleBuffer), 上限之下界(checkContractBounds)亦於此先核; unit = 本次之定量資訊(記於state.unit與回傳)
+    let unit = null
+    let calcBaseUnitQuantity = null
+    if (byUnits) {
+        let maxNotional = checkContractMaxNotional(get(opt, 'maxNotional', null), 'opt.maxNotional')
+        let maxUnits = checkContractMaxUnits(get(opt, 'maxUnits', null), 'opt.maxUnits')
+        if (maxUnits !== null && units > maxUnits) {
+            throw new Error(`invalid units: must not exceed opt.maxUnits`)
+        }
+        let ruleOpt = get(opt, 'rule', null)
+        let ruleIn = ruleOpt === null ? getContractRule(st) : ruleOpt
+        calcBaseUnitQuantity = await loadCalcBaseUnitQuantity()
+        let buildBaseUnitNotional = await loadBuildBaseUnitNotional()
+        let rb = checkContractRuleBuffer(buildBaseUnitNotional, ruleIn, get(opt, 'buffer', null), units, 'opt')
+        checkContractBounds(calcBaseUnitQuantity, rb.rule, rb.buffer, units, maxNotional)
+        unit = { units, rule: rb.rule, buffer: rb.buffer, maxNotional, maxUnits, k: null, q0: null, n0: null, quantityStr: null, notional: null }
     }
 
     //opt, 非預期視為未給
@@ -117,6 +155,11 @@ let opBinaContractMarket = async(st, ott, mode, tdid, uTrade, rTakeProfit, rStop
 
     //client
     let { client, SYMBOL, basePath, recvWindow } = getBinaClient(st, opt)
+
+    //依單位數定量: 規則帶標的時須為本單之標的(未帶者照收)
+    if (byUnits && unit.rule.symbol !== undefined && unit.rule.symbol !== SYMBOL) {
+        throw new Error(`invalid opt.rule.symbol: must equal st.symbol`)
+    }
 
     //idir, sideIn, sideOut, pos
     let idir = mode === 'short' ? -1 : 1
@@ -138,10 +181,13 @@ let opBinaContractMarket = async(st, ott, mode, tdid, uTrade, rTakeProfit, rStop
         sl: { status: 'notSent', algoId: null, clientAlgoId: cidSl, reason: null, tSign: null, conclusiveAfter: null, res: null },
         tp: { status: 'notSent', algoId: null, clientAlgoId: cidTp, reason: null, tSign: null, conclusiveAfter: null, res: null },
     }
+    if (byUnits) {
+        state.unit = unit
+    }
 
     let fail = (outcome, execState, err = null) => {
         let info = err ? classifyBinaErr(err) : null
-        return new BinaOpError(`opBinaContractMarket failed: ${outcome}`, {
+        return new BinaOpError(`${name} failed: ${outcome}`, {
             outcome,
             execState,
             state,
@@ -191,18 +237,18 @@ let opBinaContractMarket = async(st, ott, mode, tdid, uTrade, rTakeProfit, rStop
         }
 
         //帳戶設定, 冪等, 重呼叫安全; -4046、-4059判無須變更, 不比對字串
-        let runSetup = async (name, fn, shape) => {
+        let runSetup = async (setupName, fn, shape) => {
             try {
                 await sendBina(fn, shape)
-                state.setup[name] = 'changed'
+                state.setup[setupName] = 'changed'
             }
             catch (err) {
                 let info = classifyBinaErr(err)
                 if (info.kind === 'noChange') {
-                    state.setup[name] = 'unchanged'
+                    state.setup[setupName] = 'unchanged'
                     return
                 }
-                state.setup[name] = info.execState === 'notExecuted' ? 'rejected' : 'unknown'
+                state.setup[setupName] = info.execState === 'notExecuted' ? 'rejected' : 'unknown'
                 throw notEntered('setup', err)
             }
         }
@@ -241,14 +287,33 @@ let opBinaContractMarket = async(st, ott, mode, tdid, uTrade, rTakeProfit, rStop
         let priceTakeProfit = dig((1 + idir * rTakeProfit) * cdbl(price), digPrice)
         let priceStopLoss = dig((1 - idir * rStopLoss) * cdbl(price), digPrice)
 
-        //quantity, 向下取整至step, 名義(標記價*數量)不足notional時只補1個step, 不足quantityLow拋錯
+        //quantity, 依金額: 向下取整至step, 名義(標記價*數量)不足notional時只補1個step, 不足quantityLow拋錯
+        //依單位數: units×q0(標記價), 由calcBaseUnitQuantity求得(數量字串即其quantityStr), uTrade記為計畫名義(數量×標記價, 2位小數), 定量資訊記於unit
         let quantity = null
         try {
-            quantity = calcContractQuantity(uTrade, price, digContractQuantity, { quantityLow, notional })
+            if (byUnits) {
+                let bu = calcBaseUnitQuantity(price, unit.rule, { buffer: unit.buffer, units })
+                Object.assign(unit, { k: bu.k, q0: bu.q0, n0: bu.n0, quantityStr: bu.quantityStr, notional: bu.notional })
+                quantity = bu.quantityStr
+                uTrade = dig(bu.notional, 2)
+            }
+            else {
+                quantity = calcContractQuantity(uTrade, price, digContractQuantity, { quantityLow, notional })
+            }
         }
         catch (err) {
             state.entry.reason = 'quantityInvalid'
             throw notEntered('mark', err)
+        }
+
+        //依單位數定量之上限: 計畫名義超過opt.maxNotional、數量超過規則之maxQty ⇒ 不送單(計算值見state.unit)
+        if (byUnits && unit.notional > unit.maxNotional) {
+            state.entry.reason = 'notionalExceeded'
+            throw notEntered('mark')
+        }
+        if (byUnits && unit.rule.maxQty !== undefined && Number(quantity) > unit.rule.maxQty) {
+            state.entry.reason = 'quantityExceeded'
+            throw notEntered('mark')
         }
 
         //外層時限已過即不送單
@@ -454,6 +519,9 @@ let opBinaContractMarket = async(st, ott, mode, tdid, uTrade, rTakeProfit, rStop
 
             notes,
 
+            //依單位數定量時另帶單位數與本次之定量資訊
+            ...(byUnits ? { units, unit } : {}),
+
         }
 
     }
@@ -466,5 +534,5 @@ let opBinaContractMarket = async(st, ott, mode, tdid, uTrade, rTakeProfit, rStop
 }
 
 
-export { REG_TDID }
+export { REG_TDID, runContractMarket }
 export default opBinaContractMarket

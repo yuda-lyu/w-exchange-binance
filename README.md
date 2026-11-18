@@ -147,6 +147,48 @@ await main()
 
 現貨全部未實測.另有「過視窗查無且部位未變即判未執行」為最弱假設,非數學保證.
 
+## 以單位數定量(合約進場)
+
+`opBinaContractMarketUnits(st, ott, mode, tdid, units, rTakeProfit, rStopLoss, opt)`:除定量方式外同 `opBinaContractMarket`(流程、`err.outcome`、呼叫端義務皆同;錯誤訊息之字首為 `opBinaContractMarketUnits`).`opBinaContractMarket` 之行為與回傳不變.
+
+| 項 | 內容 |
+|---|---|
+| 進場數量 | `units × q0(送單當下之標記價)`;`q0 = k × stepSize`,`k = max(⌈minQty ÷ stepSize⌉, ⌈minNotional × (1 + buffer) ÷ (標記價 × stepSize)⌉)`,即步長之整數倍、不小於最小數量、名義不低於 `minNotional × (1 + buffer)` 之最小值 |
+| 計算之來源 | `q0` 與數量字串由 `w-trade-backtest` 之 `calcBaseUnitQuantity` 求得;交易規則與緩衝之有效性與可計算性由其 `buildBaseUnitNotional` 判定(訊息之名稱為 `opt`,如 `invalid opt.rule.stepSize: …`、`invalid opt.buffer: …`、`invalid opt: step count k …`).兩檔(`w-trade-backtest/src/calcBaseUnitQuantity.mjs`、`w-trade-backtest/src/buildBaseUnitNotional.mjs`)只在以單位數定量時才動態載入,經 `src/` 或經 `main`(`dist/` 之打包檔;打包時兩檔列為 external)使用皆取已安裝之回測套件之檔;未用新入口者不依賴它們;載入失敗即拋 `calcBaseUnitQuantity unavailable: …` 或 `buildBaseUnitNotional unavailable: …`,不送任何請求 |
+| 數字類之輸入 | `units`、`opt.maxNotional`、`opt.maxUnits`、交易規則之數值、`opt.buffer` 皆收數字或數字字串(如交易所回之 `'0.001'`、表單之 `'3'`),通過即轉為 Number 後使用,定量資訊所記為轉換值 |
+| `units` | 有效整數且 ≥ 1(安全整數內;`'3'`、`'22.00'` 等整數值之數字字串亦收;小數、`'1.5'` 拒).把金額誤當單位數由必給之每單名目之上限與其下界擋下 |
+| 每單名目之上限 `opt.maxNotional` | **必給**,有效數字且 > 0,無預設.**送任何請求之前**:`units × minNotional × (1 + buffer)`(每單名目之下界,與價格無關)> 上限即拋(十進位精確比較,恰等於者不拒).**標記價取得後**:計畫名義(`units × q0 × 標記價`)超過即不送進場單:`NOT_ENTERED`(`stage:'mark'`、`entry.reason:'notionalExceeded'`;計算值見 `err.state.unit`).上限以送單當下之標記價計,實際成交名義(成交價 × 成交量)可能因滑價略高 |
+| 單位數之上限 `opt.maxUnits` | 選填,有效整數且 ≥ 1;`units` 超過即拋,不送任何請求 |
+| 交易規則 `opt.rule` | `{ stepSize, minQty, minNotional, maxQty?, symbol? }`(其他欄位不讀).未給(`undefined`、`null`)則由設定物件轉成:`stepSize = 10^-st.digContractQuantity`、`minQty = st.quantityLow`、`minNotional = st.notional`,三者皆須給(訊息為 `invalid st.<欄>: …`).帶 `symbol` 者須等於 `st.symbol`(不符即拋,不送任何請求;未帶者照收 —— 手給之規則不核標的).帶 `maxQty` 者:`units × ⌈minQty ÷ stepSize⌉ × stepSize`(最小合法數量,與價格無關)> `maxQty` 即於送任何請求之前拋(精確比較);標記價取得後之數量超過即不送進場單(`entry.reason:'quantityExceeded'`) |
+| 緩衝 `opt.buffer` | 有效數字且 0 ≤ buffer ≤ 1(回測套件收 ≥ 0,本套件另限 ≤ 1);未給取 `BUFFER_DEFAULT`(0.1),由本套件明傳給回測套件之函數 |
+| 檢測 | `units`、上限之有效性與其下界、`opt.rule`、`opt.buffer` 與規則之可計算性(`buildBaseUnitNotional` 之判定,例:`⌈minQty ÷ stepSize⌉` 超過安全整數)皆於任何請求(含帳戶設定)前檢測;各鍵給了而無效即拋(影響下單數量,不視為未給);依標記價計算失敗(格數超過安全整數、標記價非正)為 `NOT_ENTERED`(`stage:'mark'`、`entry.reason:'quantityInvalid'`) |
+| 重試 | `entry.reason` 為 `notionalExceeded`、`quantityExceeded` 者,同一價位下必再被拒(非暫時性),呼叫端勿自動重試;讀取標記價失敗(`stage:'mark'`、`entry.reason` 為 `null`)才是暫時性 |
+| 不使用 | 下單金額與 `st.uTrade` |
+| 出場 | 止損止盈之數量 = 實際成交量(同 `opBinaContractMarket`),不以掛單時之價格重算 |
+| 定量資訊 | `err.state.unit` 與成功回傳之 `unit`:`{ units, rule, buffer, maxNotional, maxUnits, k, q0, n0, quantityStr, notional }`(未及定量者 `k` 以下為 `null`) |
+| 回傳 | 同 `opBinaContractMarket`,末尾另帶 `units`、`unit`.`uTrade` 為計畫名義(數量 × 標記價,2 位小數;部分成交而成功回傳時仍為全量之計畫值,實際以 `uTradeReal` 為準);`opBinaContractMarket` 之 `uTrade` 則為輸入之下單金額 |
+| 持倉模式 | 同 `opBinaContractMarket`,只支援雙向持倉(進場帶 `positionSide`);所需保證金隨單位數與價格而變 |
+
+交易規則之取得與輔助函數(`src/calcContractUnitsQuantity.mjs`;以下兩個取得函數之欄位檢測為本套件自做,以給出 `st`、`symb` 之欄名):
+
+- `getContractRule(st)`:由設定物件轉成(如上).
+- `getContractRuleFromSymbol(symb)`:由 `opBinaContractQuerySymbolInfor` 之回傳轉成;`stepSize`、`minQty`(與有給時之 `maxQty`)取 `filters` 之 `MARKET_LOT_SIZE`(市價單之數量規則,不取 `LOT_SIZE`),`minNotional` 取 `MIN_NOTIONAL` 之 `notional`,另帶商品資訊之 `symbol`;缺或無效即拋,不改取其他 filter.
+- `calcContractUnitsQuantity(price, rule, opt)`(預設匯出,非同步):回 `{ k, q0, n0, units, quantity, notional, quantityStr }`,參數、回傳與錯誤訊息同 `calcBaseUnitQuantity`;`opt.buffer` 未給時明傳 `BUFFER_DEFAULT`.**只計算,不做 `opBinaContractMarketUnits` 之任何較嚴之檢查**(每單名目與單位數之上限與其下界、緩衝 ≤ 1、規則之標的與 `maxQty`).
+- `loadCalcBaseUnitQuantity()`、`loadBuildBaseUnitNotional()`:回同步之 `calcBaseUnitQuantity`、`buildBaseUnitNotional`,供須在同步段內定量或檢測者先載入一次(同上,只計算或判定).
+- 送單前之檢查(具名匯出,供以上自行定量並下單者重用;無效即拋 `invalid <name>…`,不回顯值):`checkContractUnits(units, name)`、`checkContractMaxNotional(v, name)`、`checkContractMaxUnits(v, name)`(皆收數字或數字字串,回 Number;後者未給回 `null`)、`checkContractRuleBuffer(build, rule, buffer, units, name)`(`build` 為 `loadBuildBaseUnitNotional()` 之回傳;判定交 `build({ rule, buffer, units }, name)`,另限緩衝 ≤ 1、檢 `maxQty`、`symbol`;回 `{ rule, buffer }` 之轉換值)、`checkContractBounds(calc, rule, buffer, units, maxNotional)`(上限之下界;`calc` 為 `loadCalcBaseUnitQuantity()` 之回傳).標的之核對(`rule.symbol` 等於本單之標的)與標記價後之上限比較須由呼叫端自做.
+
+```alias
+import webina from './src/WExchangeBinance.mjs'
+import { getContractRuleFromSymbol } from './src/calcContractUnitsQuantity.mjs'
+
+let symb = await webina.opBinaContractQuerySymbolInfor(st, 'ETHUSDT')
+let rule = getContractRuleFromSymbol(symb)
+// rule => { stepSize: 0.001, minQty: 0.001, minNotional: 20, maxQty: 10000, symbol: 'ETHUSDT' }
+
+//標記價2000時: q0 = 0.011(名義22), 3單位送0.033(名義66 ≤ 上限80)
+let res = await webina.opBinaContractMarketUnits(st, ott, 'long', tdid, 3, 0.04, 0.02, { rule, maxNotional: 80 })
+```
+
 ## Testing
 
 ```alias

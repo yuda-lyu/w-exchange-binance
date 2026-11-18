@@ -19,6 +19,9 @@ describe('站點×結果矩陣 (本機假伺服器)', function() {
     let isTp = (p) => p.get('type') === 'TAKE_PROFIT_MARKET'
 
     let market = (st) => webina.opBinaContractMarket(st, ott, 'long', tdid(), 22, 0.04, 0.02, { ...opt, setLever: true, setCrossMargin: true, setDualSide: true })
+    //依單位數定量(R-UNITS): 與Market共用本體, 站點相同; 標記價3000.00、規則由st轉成 ⇒ 1單位為0.008
+    let marketUnits = (st) => webina.opBinaContractMarketUnits(st, ott, 'long', tdid(), 1, 0.04, 0.02, { ...opt, setLever: true, setCrossMargin: true, setDualSide: true, maxNotional: 100 })
+    let isMarketOp = (op) => op === market || op === marketUnits
     let marketEntry = (st) => webina.opBinaContractMarketEntry(st, 'ETHUSDT', 'SELL', 'LONG', 0.007, opt)
     let marketEntryId = (st) => webina.opBinaContractMarketEntry(st, 'ETHUSDT', 'SELL', 'LONG', 0.007, { ...opt, clientOrderId: tdid() })
     let place = (st) => webina.opBinaContractPlaceProtection(st, tdid(), 'long', '0.007', 2900, 3100, opt)
@@ -106,6 +109,9 @@ describe('站點×結果矩陣 (本機假伺服器)', function() {
         { id: 'SpotMarket.oco', w: 'POST', key: 'POST /api/v3/orderList/oco', op: (st) => webina.opBinaSpotMarket(st, ott, tdid(), 10, 0.04, 0.02, opt), wr: 'entry' },
         { id: 'SpotLimit.otoco', w: 'POST', key: 'POST /api/v3/orderList/otoco', op: (st) => webina.opBinaSpotLimit(st, ott, tdid(), 3000, 10, 0.04, 0.02, opt), wr: 'entry' },
     ]
+    //MarketUnits之站點: Market之全部站點(含回查、保護單)逐一以新入口再跑一列
+    let sitesMarket = sites.filter((s) => s.op === market)
+    sites.push(...sitesMarket.map((s) => ({ ...s, id: `MarketUnits:${s.id}`, op: marketUnits })))
 
     let times = (n, a) => Array.from({ length: n }, () => ({ ...a }))
     let replyErr = (status, body) => ({ reply: { status, body } })
@@ -201,10 +207,13 @@ describe('站點×結果矩陣 (本機假伺服器)', function() {
 
     it('矩陣格數全跑完; 故障確實注入目標站', () => {
         assert.strictEqual(results.length, nCells)
+        //MarketUnits之列: Market之15站(9直接、回查2、保護單4)皆以新入口再跑
+        assert.strictEqual(sitesMarket.length, 15)
+        assert.strictEqual(results.filter((r) => r.s.op === marketUnits).length, 15 * Object.keys(outcomes).length)
         let bad = []
         for (let r of results) {
             //進場或閘已先失敗時, 較後之站到不了, 故只要求最先之站有收到請求
-            if (r.s.id === 'Market.gate' || r.s.id === 'MarketEntry.order' || r.s.id === 'CancelAll.order') {
+            if (r.s.id === 'Market.gate' || r.s.id === 'MarketUnits:Market.gate' || r.s.id === 'MarketEntry.order' || r.s.id === 'CancelAll.order') {
                 if (r.fx.count(r.s.key, r.s.filter) === 0) {
                     bad.push(`${r.site}/${r.outcome}`)
                 }
@@ -259,12 +268,12 @@ describe('站點×結果矩陣 (本機假伺服器)', function() {
     it('不變式④: 進場未成交或狀態未知時絕不掛保護單; 且失敗結果之state.entry與假交易所一致', () => {
         let bad = []
         for (let r of results) {
-            if (r.s.op === market && !r.ok && ['NOT_ENTERED', 'ENTRY_UNKNOWN', 'TDID_USED'].includes(r.err.outcome)) {
+            if (isMarketOp(r.s.op) && !r.ok && ['NOT_ENTERED', 'ENTRY_UNKNOWN', 'TDID_USED'].includes(r.err.outcome)) {
                 if (r.fx.count('POST /fapi/v1/algoOrder') !== 0) {
                     bad.push(`${r.site}/${r.outcome}: algo`)
                 }
             }
-            if (r.s.op === market && !r.ok && r.err.outcome === 'NOT_ENTERED' && r.fx.ex.orders.length > 0) {
+            if (isMarketOp(r.s.op) && !r.ok && r.err.outcome === 'NOT_ENTERED' && r.fx.ex.orders.length > 0) {
                 bad.push(`${r.site}/${r.outcome}: NOT_ENTERED而假交易所有單`)
             }
         }
@@ -305,14 +314,16 @@ describe('站點×結果矩陣 (本機假伺服器)', function() {
         assert.deepStrictEqual(bad, [])
     })
 
-    it('不變式⑦: Market成功回傳者, 假交易所須有成交之進場單與兩張開啟之保護單, 量與回傳相同', () => {
+    it('不變式⑦: Market(含MarketUnits)成功回傳者, 假交易所須有成交之進場單與兩張開啟之保護單, 量與回傳相同', () => {
         let bad = []
         let nOk = 0
+        let nOkUnits = 0
         for (let r of results) {
-            if (r.s.op !== market || !r.ok) {
+            if (!isMarketOp(r.s.op) || !r.ok) {
                 continue
             }
             nOk++
+            nOkUnits += r.s.op === marketUnits ? 1 : 0
             let filled = r.fx.ex.orders.filter((o) => o.status === 'FILLED')
             let open = r.fx.ex.algos.filter((o) => o.algoStatus === 'NEW')
             let kinds = open.map((o) => o.orderType).sort().join(',')
@@ -326,6 +337,7 @@ describe('站點×結果矩陣 (本機假伺服器)', function() {
             }
         }
         assert.ok(nOk > 50, `成功格數 ${nOk}`)
+        assert.ok(nOkUnits > 25, `MarketUnits之成功格數 ${nOkUnits}`)
         assert.deepStrictEqual(bad, [])
     })
 

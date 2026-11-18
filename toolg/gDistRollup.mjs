@@ -26,6 +26,8 @@ rollupFiles({
         'https',
         'os',
         'events',
+        'w-trade-backtest/src/calcBaseUnitQuantity.mjs',
+        'w-trade-backtest/src/buildBaseUnitNotional.mjs',
     ],
 })
 
