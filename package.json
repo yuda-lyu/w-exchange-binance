@@ -1,6 +1,6 @@
 {
   "name": "w-exchange-binance",
-  "version": "1.0.64",
+  "version": "1.0.65",
   "main": "dist/w-exchange-binance.umd.js",
   "dependencies": {
     "@binance/common": "^2.5.5",
@@ -8,8 +8,8 @@
     "@binance/spot": "^34.1.1",
     "axios": "^1.21.1",
     "json5": "^2.2.3",
-    "w-trade-backtest": "^1.1.54",
-    "wsemi": "^1.9.78"
+    "w-trade-backtest": "^1.1.55",
+    "wsemi": "^1.9.79"
   },
   "devDependencies": {
     "w-package-tools": "^1.1.31"
